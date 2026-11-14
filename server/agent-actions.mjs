@@ -2,6 +2,24 @@ const colors = ['black', 'grey', 'light-violet', 'violet', 'blue', 'light-blue',
 const shapeKinds = ['box', 'ellipse', 'diamond', 'note', 'text']
 const strokeSizes = ['s', 'm', 'l']
 const textSizes = ['s', 'm', 'l', 'xl']
+export const widgetKinds = ['table', 'bar', 'line', 'pie', 'stats', 'timeline']
+const shortText = { type: 'string', maxLength: 60 }
+// One data shape for every widget kind (strict structured outputs need a fixed shape); see validateWidget for how each kind reads it.
+const widgetActionSchema = {
+  type: 'object', additionalProperties: false,
+  required: ['_type', 'id', 'atMs', 'kind', 'x', 'y', 'w', 'h', 'title', 'labels', 'series', 'rows', 'unit'],
+  properties: {
+    _type: { type: 'string', const: 'widget' }, id: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,47}$' }, atMs: { type: 'integer', minimum: 0, maximum: 12000 },
+    kind: { type: 'string', enum: widgetKinds },
+    x: { type: 'number', minimum: 0, maximum: 1200 }, y: { type: 'number', minimum: 0, maximum: 700 },
+    w: { type: 'number', minimum: 220, maximum: 1200 }, h: { type: 'number', minimum: 140, maximum: 700 },
+    title: { type: 'string', minLength: 1, maxLength: 80 },
+    labels: { type: 'array', maxItems: 12, items: shortText },
+    series: { type: 'array', maxItems: 4, items: { type: 'object', additionalProperties: false, required: ['name', 'values'], properties: { name: shortText, values: { type: 'array', maxItems: 12, items: { type: 'number' } } } } },
+    rows: { type: 'array', maxItems: 10, items: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 120 } } },
+    unit: { type: 'string', maxLength: 12 },
+  },
+}
 const beatPointSchema = {
   type: 'object', additionalProperties: false, required: ['x', 'y'],
   properties: { x: { type: 'number', minimum: 0, maximum: 1200 }, y: { type: 'number', minimum: 0, maximum: 700 } },
@@ -97,6 +115,7 @@ export const teachingBeatSchema = {
             required: ['_type', 'id', 'atMs', 'targetId', 'dx', 'dy'],
             properties: { _type: { type: 'string', const: 'move' }, id: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,47}$' }, atMs: { type: 'integer', minimum: 0, maximum: 12000 }, targetId: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,47}$' }, dx: { type: 'number', minimum: -1200, maximum: 1200 }, dy: { type: 'number', minimum: -700, maximum: 700 } },
           },
+          widgetActionSchema,
         ],
       },
     },
@@ -175,6 +194,29 @@ export function validateDiagramPlan(value) {
   return value
 }
 
+const shortString = (value, max) => typeof value === 'string' && value.length <= max
+
+/** Checks a widget's fixed data shape against what its kind reads:
+ * table: labels = column headers, rows = cells; bar/line: labels = categories along x, series = 1-4 named value lists;
+ * pie: labels = slices, series[0].values = sizes; stats: labels = figure names, series[0].values = figures, unit = suffix;
+ * timeline: rows = [when, what] pairs in order. */
+function validateWidget(action) {
+  const fail = () => { throw new Error(`The teaching beat contains an invalid ${String(action.kind)} widget.`) }
+  if (!widgetKinds.includes(action.kind) || !finiteNumber(action.x) || !finiteNumber(action.y) || !finiteNumber(action.w) || !finiteNumber(action.h) ||
+      action.x < 0 || action.y < 0 || action.w < 220 || action.h < 140 || action.x + action.w > 1200 || action.y + action.h > 700 ||
+      typeof action.title !== 'string' || !action.title.trim() || action.title.length > 80 || !shortString(action.unit, 12) ||
+      !Array.isArray(action.labels) || action.labels.length > 12 || !action.labels.every(label => shortString(label, 60)) ||
+      !Array.isArray(action.series) || action.series.length > 4 || !action.series.every(series => series && shortString(series.name, 60) && Array.isArray(series.values) && series.values.length <= 12 && series.values.every(finiteNumber)) ||
+      !Array.isArray(action.rows) || action.rows.length > 10 || !action.rows.every(row => Array.isArray(row) && row.length <= 6 && row.every(cell => shortString(cell, 120)))) fail()
+  const n = action.labels.length
+  const matches = series => series.values.length === n
+  if (action.kind === 'table' && (n < 1 || action.rows.length < 1 || action.rows.some(row => row.length !== n))) fail()
+  if ((action.kind === 'bar' || action.kind === 'line') && (n < 2 || action.series.length < 1 || !action.series.every(matches))) fail()
+  if (action.kind === 'pie' && (n < 2 || action.series.length !== 1 || !matches(action.series[0]) || action.series[0].values.some(v => v < 0) || action.series[0].values.every(v => v === 0))) fail()
+  if (action.kind === 'stats' && (n < 1 || n > 6 || action.series.length !== 1 || !matches(action.series[0]))) fail()
+  if (action.kind === 'timeline' && (action.rows.length < 2 || action.rows.some(row => row.length !== 2))) fail()
+}
+
 export function validateTeachingBeat(value) {
   if (!value || typeof value !== 'object' || !validBeatId(value.beatId) || typeof value.context !== 'string' || !value.context.trim() || value.context.length > 300 ||
       typeof value.speech !== 'string' || !value.speech.trim() || value.speech.length > 600 || !Number.isInteger(value.pauseMs) || value.pauseMs < 0 || value.pauseMs > 8000 ||
@@ -201,6 +243,8 @@ export function validateTeachingBeat(value) {
       if (!validBeatId(action.targetId)) throw new Error('The teaching beat contains an invalid revision target.')
     } else if (action._type === 'move') {
       if (!validBeatId(action.targetId) || !finiteNumber(action.dx) || Math.abs(action.dx) > 1200 || !finiteNumber(action.dy) || Math.abs(action.dy) > 700) throw new Error('The teaching beat contains an invalid move target or distance.')
+    } else if (action._type === 'widget') {
+      validateWidget(action)
     } else {
       throw new Error(`Unsupported teaching action: ${String(action._type)}`)
     }

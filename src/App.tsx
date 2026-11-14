@@ -221,19 +221,27 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     else { lessonEntryRef.current = { primary, extra, goal }; setCurrentId(primary) }
   }
   const titleOf = (id: string) => papers.find(p => p.id === id)?.title || 'Source'
-  const openLesson = (sourceId: string) => enterLesson(sourceId, [], null, { kind: 'source', label: '' })
+  const openLesson = (sourceId: string) => {
+    if (papers.find(paper => paper.id === sourceId)?.documentRole === 'process') { setStatus('This process document guides lessons on content sources in the project.'); return }
+    enterLesson(sourceId, [], null, { kind: 'source', label: '' })
+  }
   const openCompare = (a: string, b: string) => enterLesson(a, [b], COMPARE_GOAL(titleOf(a), titleOf(b)), { kind: 'compare', label: 'Connection' })
   const projectSources = activeProject ? activeProject.sourceIds.map(id => papers.find(p => p.id === id)).filter((p): p is ImportedPaper => Boolean(p)) : []
+  const contentSources = projectSources.filter(paper => paper.documentRole !== 'process')
+  const processGuidance = projectSources.filter(paper => paper.documentRole === 'process').map(paper => `Guideline: ${paper.title}\n${paper.text.slice(0, 6_000)}`).join('\n\n').slice(0, 18_000)
+  const processGuidanceRef = useRef(processGuidance)
+  processGuidanceRef.current = processGuidance
   const openDeep = () => {
-    if (!activeProject || !projectSources.length) return
-    const [first, ...rest] = projectSources.map(p => p.id)
+    if (!activeProject || !contentSources.length) return
+    const [first, ...rest] = contentSources.map(p => p.id)
     enterLesson(first, rest, DEEP_GOAL(activeProject.name), { kind: 'deep', label: 'Deep dive' })
   }
-  const projectSummaries = useMemo(() => Object.fromEntries(Object.entries(activeProject?.summaries || {}).map(([id, s]) => [id, s.summary || s.tidbit])), [activeProject])
-  const projectSynthesisCurrent = !!activeProject && activeProject.synthesisFor === projectSynthesisKey(activeProject)
-  const projectAnalysisStatus = activeProject && projectSources.some(paper => !isCurrentSummary(activeProject.summaries[paper.id]))
+  const projectSummaries = useMemo(() => Object.fromEntries(contentSources.flatMap(paper => activeProject?.summaries[paper.id] ? [[paper.id, activeProject.summaries[paper.id].summary || activeProject.summaries[paper.id].tidbit]] : [])), [activeProject, papers])
+  const contentProject = activeProject ? { ...activeProject, sourceIds: contentSources.map(paper => paper.id), summaries: Object.fromEntries(contentSources.flatMap(paper => activeProject.summaries[paper.id] ? [[paper.id, activeProject.summaries[paper.id]]] : [])) } : null
+  const projectSynthesisCurrent = !!contentProject && contentProject.synthesisFor === projectSynthesisKey(contentProject)
+  const projectAnalysisStatus = activeProject && contentSources.some(paper => !isCurrentSummary(activeProject.summaries[paper.id]))
     ? 'Reading sources…'
-    : activeProject && projectSources.length > 1 && !projectSynthesisCurrent ? 'Finding connections…' : null
+    : activeProject && contentSources.length > 1 && !projectSynthesisCurrent ? 'Finding connections…' : null
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
@@ -298,6 +306,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
 
   const toggleLearningSource = useCallback((sourceId: string) => {
     if (!currentId || sourceId === currentId) return
+    if (papers.find(paper => paper.id === sourceId)?.documentRole === 'process') return
     const next = selectedSourceIds.includes(sourceId)
       ? selectedSourceIds.filter(id => id !== sourceId)
       : [...selectedSourceIds, sourceId]
@@ -343,7 +352,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
       learnerEvidenceRef.current = profile.evidence
       setLearnerEvidence(profile.evidence)
       const activePlan = planRef.current
-      if (activePlan) tutorRef.current?.updateCheckpointBrief(buildCheckpointBrief(activePlan, checkpointIndexRef.current, graph, profile.evidence, currentPaper?.pageCount))
+      if (activePlan) tutorRef.current?.updateCheckpointBrief(buildCheckpointBrief(activePlan, checkpointIndexRef.current, graph, profile.evidence, currentPaper?.pageCount, processGuidanceRef.current))
     }).catch(reason => setError(errorMessage(reason)))
   }, [])
 
@@ -417,16 +426,42 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
   }, [addOpen])
 
   const saveImport = useCallback(async (result: ImportResult) => {
-    const paper: ImportedPaper = { ...result, id: crypto.randomUUID(), importedAt: new Date().toISOString() }
+    let roleSummary: Awaited<ReturnType<typeof summarizeSource>> | undefined
+    if (result.sourceKind !== 'topic' && result.text.trim()) {
+      try { roleSummary = await summarizeSource({ ...result, id: '', importedAt: '' }) }
+      catch { /* Classification is advisory; imports remain usable as content when the model is unavailable. */ }
+    }
+    const paper: ImportedPaper = { ...result, documentRole: roleSummary?.documentRole || 'content', id: crypto.randomUUID(), importedAt: new Date().toISOString() }
     await savePaper(paper)
     setPapers(existing => [paper, ...existing])
     const projectId = activeProjectIdRef.current
-    if (projectId) updateProjects(list => list.map(p => p.id === projectId ? { ...p, sourceIds: [...p.sourceIds, paper.id] } : p))
+    if (projectId) updateProjects(list => list.map(p => p.id === projectId ? {
+      ...p, sourceIds: [...new Set([...p.sourceIds, paper.id])],
+      summaries: paper.documentRole === 'process' || !roleSummary ? p.summaries : { ...p.summaries, [paper.id]: roleSummary },
+    } : p))
     setAnalysisError(null)
-    setCurrentId(paper.id)
-    setStatus(paper.sourceKind === 'topic' ? `Started a lesson on "${paper.title}"` : `Imported "${paper.title}" - ${paper.pageCount} segments`)
+    if (paper.documentRole !== 'process') setCurrentId(paper.id)
+    setStatus(paper.documentRole === 'process' ? `Imported "${paper.title}" as a process guide.` : paper.sourceKind === 'topic' ? `Started a lesson on "${paper.title}"` : `Imported "${paper.title}" - ${paper.pageCount} segments`)
     setError('')
   }, [updateProjects])
+
+  const changeDocumentRole = useCallback(async (sourceId: string, documentRole: 'content' | 'process') => {
+    const paper = papers.find(item => item.id === sourceId)
+    if (!paper || (paper.documentRole || 'content') === documentRole) return
+    try {
+      await savePaper({ ...paper, documentRole })
+      setPapers(items => items.map(item => item.id === sourceId ? { ...item, documentRole } : item))
+      updateProjects(list => list.map(project => {
+        if (!project.sourceIds.includes(sourceId)) return project
+        const summaries = { ...project.summaries }
+        delete summaries[sourceId]
+        return { ...project, summaries }
+      }))
+      setAnalysisError(null)
+    } catch (reason) {
+      setError(errorMessage(reason))
+    }
+  }, [papers, updateProjects])
 
   const createTopicLesson = useCallback(async (value: string) => {
     const topic = value.trim()
@@ -702,7 +737,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     setCheckpointIndex(next)
     await persistLessonState(activePlan, next)
     checkpointTranscriptStartRef.current = transcriptRef.current.length
-    return formatCheckpointBrief(buildCheckpointBrief(activePlan, next, knowledgeGraphRef.current, learnerEvidenceRef.current, currentPaper?.pageCount))
+    return formatCheckpointBrief(buildCheckpointBrief(activePlan, next, knowledgeGraphRef.current, learnerEvidenceRef.current, currentPaper?.pageCount, processGuidanceRef.current))
   }, [currentPaper, persistLessonState])
 
   const selectCheckpoint = useCallback((index: number) => {
@@ -714,7 +749,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     checkpointTranscriptStartRef.current = transcriptRef.current.length
     setCheckpointIndex(next)
     void persistLessonState(activePlan, next)
-    tutorRef.current?.updateCheckpointBrief(buildCheckpointBrief(activePlan, next, knowledgeGraph, learnerEvidence, currentPaper?.pageCount))
+    tutorRef.current?.updateCheckpointBrief(buildCheckpointBrief(activePlan, next, knowledgeGraph, learnerEvidence, currentPaper?.pageCount, processGuidanceRef.current))
   }, [currentPaper, knowledgeGraph, learnerEvidence, persistLessonState])
 
   const startTutor = useCallback(async () => {
@@ -758,7 +793,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
       const tutor = new HybridTutor(callbacks, voiceAudioContext, { streaming: voiceConfig.streaming !== false, bargeIn: voiceConfig.bargeIn !== false, rtcUrl: voiceConfig.rtcUrl, iceServers: voiceConfig.iceServers })
       tutorRef.current = tutor
       const index = checkpointIndexRef.current
-      await tutor.connect(currentPaper.title, buildCheckpointBrief(activePlan, index, knowledgeGraph, learnerEvidence, currentPaper.pageCount))
+      await tutor.connect(currentPaper.title, buildCheckpointBrief(activePlan, index, knowledgeGraph, learnerEvidence, currentPaper.pageCount, processGuidanceRef.current))
     } catch (reason) {
       void voiceAudioContext.close()
       const message = errorMessage(reason)
@@ -797,7 +832,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     const index = checkpointIndexRef.current
     const checkpoint = activePlan.sessions[index]
     if (!tutorRef.current) { void startTutor(); return }
-    tutorRef.current.resume(buildCheckpointBrief(activePlan, index, knowledgeGraph, learnerEvidence, currentPaper?.pageCount))
+    tutorRef.current.resume(buildCheckpointBrief(activePlan, index, knowledgeGraph, learnerEvidence, currentPaper?.pageCount, processGuidanceRef.current))
     setTutorDetail(`Resuming ${checkpoint.title}.`)
   }, [currentPaper, knowledgeGraph, learnerEvidence, startTutor])
 
@@ -823,6 +858,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         title: paper.title, question, checkpoint,
+        processGuidance: processGuidanceRef.current,
         paperEvidence: readPaperEvidence(paper.text, checkpoint.sourcePages, paper.pageCount),
         selection: selectionContext || (selectionImage && editorRef.current ? getSelectionContext(editorRef.current) : undefined),
         selectionImage, history: transcriptRef.current.slice(-6),
@@ -870,7 +906,10 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
   }, [currentId, selectedSourceIds])
 
   const generateTeachingPlan = useCallback(async (goal?: string) => {
-    if (!currentPaper) return
+    if (!currentPaper || currentPaper.documentRole === 'process') {
+      if (currentPaper?.documentRole === 'process') setStatus('Process documents guide content lessons and are not taught as lesson sources.')
+      return
+    }
     const paper = currentPaper
     setPlanBusy(true)
     setError('')
@@ -882,7 +921,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
         : goal?.trim() || defaultLearningGoal
       // No diagnostic quiz: plan straight from the source and the learner's goal.
       const nextPlan = await requestAdaptivePlan({
-        paperTitle: paper.title, sourceKind: paper.sourceKind, pageCount: paper.pageCount, text: paper.text,
+        paperTitle: paper.title, sourceKind: paper.sourceKind, pageCount: paper.pageCount, text: paper.text, processGuidance: processGuidanceRef.current,
         diagnostic: { goal: learningGoal, questions: [] }, answers: [],
         knowledge: learnerKnowledge.slice(0, 100), evidence: learnerEvidence.slice(-20),
         priorKnowledge: { propositions: knowledgeGraph.propositions?.slice(-100).map(({ id, concept, statement }) => ({ id, concept, statement })) || [], reasoningLinks: knowledgeGraph.reasoningLinks?.slice(-200).map(({ source, target, relationType, reason }) => ({ source, target, relationType, reason })) || [] },
@@ -924,6 +963,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     if (!activeProject) return
     const projectId = activeProject.id
     for (const paper of projectSources) {
+      if (paper.documentRole === 'process') continue
       const requestKey = `${projectId}:${paper.id}`
       if (isCurrentSummary(activeProject.summaries[paper.id]) || summaryRequested.current.has(requestKey)) continue
       summaryRequested.current.add(requestKey)
@@ -938,27 +978,27 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
 
   const synthesisRequested = useRef(new Set<string>())
   useEffect(() => {
-    if (!activeProject || activeProject.sourceIds.length < 2 || !activeProject.sourceIds.every(id => isCurrentSummary(activeProject.summaries[id]))) return
-    const key = projectSynthesisKey(activeProject)
+    if (!activeProject || contentSources.length < 2 || !contentSources.every(paper => isCurrentSummary(activeProject.summaries[paper.id]))) return
+      const key = projectSynthesisKey(contentProject!)
     const requestKey = `${activeProject.id}:${key}`
     if (activeProject.synthesisFor === key || synthesisRequested.current.has(requestKey)) return
     synthesisRequested.current.add(requestKey)
-    synthesizeProject(activeProject, projectSources)
-      .then(synthesis => updateProjects(list => list.map(project => project.id === activeProject.id && projectSynthesisKey(project) === key ? { ...project, synthesis, synthesisFor: key } : project)))
+    synthesizeProject(contentProject!, contentSources)
+      .then(synthesis => updateProjects(list => list.map(project => project.id === activeProject.id && projectSynthesisKey({ ...project, sourceIds: contentSources.map(paper => paper.id) }) === key ? { ...project, synthesis, synthesisFor: key } : project)))
       .catch(reason => { synthesisRequested.current.delete(requestKey); setAnalysisError({ projectId: activeProject.id, message: errorMessage(reason) }) })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject, papers, analysisRetry])
 
 
   const completeTeachingPlan = useCallback(async (answers: string[]) => {
-    if (!currentPaper || !diagnostic) return
+    if (!currentPaper || currentPaper.documentRole === 'process' || !diagnostic) return
     const paper = currentPaper
     setPlanBusy(true)
     setError('')
     setStatus('The teaching agent is building and checking your source-grounded plan...')
     try {
       const nextPlan = await requestAdaptivePlan({
-        paperTitle: paper.title, sourceKind: paper.sourceKind, pageCount: paper.pageCount, text: paper.text, diagnostic, answers,
+        paperTitle: paper.title, sourceKind: paper.sourceKind, pageCount: paper.pageCount, text: paper.text, processGuidance: processGuidanceRef.current, diagnostic, answers,
         knowledge: learnerKnowledge.slice(0, 100),
         evidence: learnerEvidence.slice(-20),
         priorKnowledge: { propositions: knowledgeGraph.propositions?.slice(-100).map(({ id, concept, statement }) => ({ id, concept, statement })) || [], reasoningLinks: knowledgeGraph.reasoningLinks?.slice(-200).map(({ source, target, relationType, reason }) => ({ source, target, relationType, reason })) || [] },
@@ -978,7 +1018,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
   }, [currentPaper, currentId, diagnostic, knowledgeGraph, learnerKnowledge, learnerEvidence, storeTeachingPlan])
   const adaptTeachingPlan = useCallback(async (review: AnswerReview) => {
     const currentPlan = planRef.current
-    if (!currentPaper || !currentPlan) return
+    if (!currentPaper || currentPaper.documentRole === 'process' || !currentPlan) return
     const checkpointIndex = checkpointIndexRef.current
     const completedCount = review.status === 'clear' ? checkpointIndex + 1 : checkpointIndex
     setPlanBusy(true)
@@ -986,7 +1026,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     try {
       const knowledge = knowledgeGraphRef.current
       const nextPlan = await requestAdaptiveRevision({
-        paperTitle: currentPaper.title, sourceKind: currentPaper.sourceKind, pageCount: currentPaper.pageCount, text: currentPaper.text,
+        paperTitle: currentPaper.title, sourceKind: currentPaper.sourceKind, pageCount: currentPaper.pageCount, text: currentPaper.text, processGuidance: processGuidanceRef.current,
         currentPlan, completedCount,
         knowledge: latestConceptEvidence(learnerEvidenceRef.current).slice(0, 100),
         evidence: learnerEvidenceRef.current.slice(-20),
@@ -1008,7 +1048,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
       setCheckpointIndex(completedCount)
       setStatus('The remaining lesson now follows your latest answers.')
       setTutorDetail('The upcoming checkpoints were adjusted to your current understanding.')
-      tutorRef.current?.updateCheckpointBrief(buildCheckpointBrief(nextPlan, completedCount, graph, learnerEvidenceRef.current, currentPaper.pageCount))
+      tutorRef.current?.updateCheckpointBrief(buildCheckpointBrief(nextPlan, completedCount, graph, learnerEvidenceRef.current, currentPaper.pageCount, processGuidanceRef.current))
     } catch (reason) {
       const message = errorMessage(reason)
       setError(message)
@@ -1042,7 +1082,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     setKnowledgeGraph(graph)
     setStatus('Your learning progress was saved on this device.')
     const activePlan = planRef.current
-    if (activePlan) tutorRef.current?.updateCheckpointBrief(buildCheckpointBrief(activePlan, checkpointIndex, graph, nextEvidence, currentPaper.pageCount))
+    if (activePlan) tutorRef.current?.updateCheckpointBrief(buildCheckpointBrief(activePlan, checkpointIndex, graph, nextEvidence, currentPaper.pageCount, processGuidanceRef.current))
   }, [currentPaper])
   const runLearningOperation = useCallback(async <T,>(operation: () => Promise<T>) => {
     if (learningBusyRef.current) throw new Error('Finish the current learning check first.')
@@ -1091,7 +1131,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
           setKnowledgeGraph(graph)
           setPapers(items => items.map(paper => paper.id === updated.id ? updated : paper))
           const activePlan = planRef.current
-          if (activePlan) tutorRef.current?.updateCheckpointBrief(buildCheckpointBrief(activePlan, checkpointIndex, graph, learnerEvidenceRef.current, currentPaper.pageCount))
+          if (activePlan) tutorRef.current?.updateCheckpointBrief(buildCheckpointBrief(activePlan, checkpointIndex, graph, learnerEvidenceRef.current, currentPaper.pageCount, processGuidanceRef.current))
         }
       } catch {
         setStatus('Your answer was saved, but the proposition graph could not be updated from this lesson yet.')
@@ -1192,7 +1232,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
             onHideConnection={pair => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: [...new Set([...(project.hiddenConnectionPairs || []), pair])] } : project))}
             onRestoreConnection={pair => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: (project.hiddenConnectionPairs || []).filter(item => item !== pair) } : project))}
             onRestoreHiddenConnections={() => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: [] } : project))}
-            onOpen={openLesson} onCompare={openCompare} onAdd={openAdd}
+            onOpen={openLesson} onCompare={openCompare} onAdd={openAdd} onChangeRole={(id, role) => void changeDocumentRole(id, role)}
           />)
           : view !== 'lesson' ? <ProjectsPage projects={projects} papers={papers} loading={!projectsLoaded || !libraryReady} onOpen={id => navigate('board', id)} onCreate={(name, description) => { const p = newProject(name, description); updateProjects(list => [p, ...list]); navigate('board', p.id) }} onDelete={project => { if (confirm(`Delete the project "${project.name}"? Its sources stay in your library.`)) updateProjects(list => list.filter(p => p.id !== project.id)) }} /> : <>
           <div className={`canvas-area ${dragging ? 'canvas-dragging' : ''}`} onDragEnter={event => { event.preventDefault(); setDragging(true) }} onDragOver={event => event.preventDefault()} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false) }} onDrop={onCanvasDrop}>

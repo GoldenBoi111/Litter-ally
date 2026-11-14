@@ -62,6 +62,7 @@ export async function requestAdaptivePlan(input: {
   sourceKind?: string
   pageCount: number
   text: string
+  processGuidance?: string
   knowledge: Array<{ concept: string; status: LearningStatus }>
   evidence?: LearningEvidence[]
   priorKnowledge?: { propositions: Array<{ id: string; concept: string; statement: string }>; reasoningLinks: Array<{ source: string; target: string; relationType: 'explicit' | 'inferred'; reason: string }> }
@@ -79,6 +80,7 @@ export async function requestAdaptiveRevision(input: {
   sourceKind?: string
   pageCount: number
   text: string
+  processGuidance?: string
   currentPlan: TeachingPlan
   completedCount: number
   knowledge: Array<{ concept: string; status: LearningStatus }>
