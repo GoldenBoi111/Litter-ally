@@ -17,6 +17,9 @@ export function validSpeechText(text) {
 export function safeResponsesVoiceEvents(event) {
   if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') return [{ type: 'text', text: event.delta }]
   if (event.type === 'response.output_item.done' && event.item?.type === 'function_call') return [{ type: 'tool', call: event.item }]
+  // Stream tool-call arguments so the client can start speaking a teaching beat before its drawing finishes streaming.
+  if (event.type === 'response.output_item.added' && event.item?.type === 'function_call' && typeof event.item.id === 'string') return [{ type: 'tool_start', id: event.item.id, name: event.item.name }]
+  if (event.type === 'response.function_call_arguments.delta' && typeof event.item_id === 'string' && typeof event.delta === 'string') return [{ type: 'tool_delta', id: event.item_id, delta: event.delta }]
   if (event.type === 'response.completed') return [{ type: 'output', output: event.response?.output || [] }, { type: 'done' }]
   if (event.type === 'error' || event.type === 'response.failed') {
     return [{ type: 'error', error: event.message || event.error?.message || event.response?.error?.message || 'The response stream failed.' }]

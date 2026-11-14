@@ -1,4 +1,4 @@
-/** Litter-ally's mark: an ink-drawn trashcan wearing a gold star. Lines wobble slightly so it reads as drawn, not vector. */
+/** Litter-ally's mark: an ink-drawn trashcan with a clean sparkle. */
 export function LogoMark({ size = 28, className }: { size?: number; className?: string }) {
   return (
     <svg className={className} width={size} height={size} viewBox="0 0 32 32" role="img" aria-label="Litter-ally logo">
@@ -12,11 +12,11 @@ export function LogoMark({ size = 28, className }: { size?: number; className?: 
         <path d="M11.4 12.6 L12.1 25.2" opacity={0.55} />
         <path d="M20.6 12.6 L19.9 25.2" opacity={0.55} />
       </g>
-      {/* the star sticker on the front */}
+      {/* Four-point sparkle above the can signals a fresh clean. */}
       <path
-        d="M16 12.4 L17.35 15.7 L20.9 15.95 L18.2 18.25 L19.05 21.7 L16 19.85 L12.95 21.7 L13.8 18.25 L11.1 15.95 L14.65 15.7 Z"
-        fill="#f2c230" stroke="var(--ll-ink, #2a2420)" strokeWidth={1.1} strokeLinejoin="round"
-        transform="rotate(-8 16 17)"
+        d="M24.9 5.7 C25.4 8.2 26.1 8.9 28.6 9.4 C26.1 9.9 25.4 10.6 24.9 13.1 C24.4 10.6 23.7 9.9 21.2 9.4 C23.7 8.9 24.4 8.2 24.9 5.7 Z"
+        fill="#f2c230" stroke="var(--ll-ink, #2a2420)" strokeWidth={0.9} strokeLinejoin="round"
+        transform="translate(0 -1.04) translate(24.9 9.4) scale(1.4) translate(-24.9 -9.4)"
       />
     </svg>
   )
