@@ -68,6 +68,10 @@ export class HybridTutor {
   private readonly bargeIn: boolean
   private readonly rtcUrl: string
   private readonly iceServers: RTCIceServer[]
+  /** True when the local WebRTC voice host is unreachable and we fall back to the browser's own speech APIs. */
+  private browserVoice = false
+  private recognition: { start(): void; stop(): void; abort(): void; onresult: ((e: any) => void) | null; onerror: ((e: any) => void) | null; onend: (() => void) | null; lang: string; interimResults: boolean; continuous: boolean } | null = null
+  private recognized = ''
 
   constructor(private callbacks: TutorCallbacks, private preparedAudioContext?: AudioContext, options: { streaming?: boolean; bargeIn?: boolean; rtcUrl?: string; iceServers?: RTCIceServer[] } = {}) {
     this.streaming = options.streaming !== false
@@ -99,9 +103,18 @@ export class HybridTutor {
     const micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
     if (this.closed) { for (const track of micStream.getTracks()) track.stop(); return }
     this.micStream = micStream
-    await this.connectRtc(micStream)
+    this.browserVoice = false
+    try {
+      await this.connectRtc(micStream)
+    } catch (error) {
+      if (!browserSpeechAvailable()) throw error
+      // No local voice host (e.g. on a Mac without the Windows voice stack): speak and listen with the browser instead.
+      this.browserVoice = true
+      for (const track of micStream.getTracks()) track.stop()
+      this.micStream = null
+    }
     if (this.closed) return
-    this.vad = await MicVAD.new({
+    if (!this.browserVoice) this.vad = await MicVAD.new({
       model: 'v5',
       baseAssetPath: `${import.meta.env.DEV ? '/api/voice/assets' : `${import.meta.env.BASE_URL}voice-assets`}/vad/`,
       onnxWASMBasePath: `${import.meta.env.DEV ? '/api/voice/assets' : `${import.meta.env.BASE_URL}voice-assets`}/ort/`,
@@ -138,8 +151,8 @@ export class HybridTutor {
       },
     })
     if (this.closed) { await this.vad.destroy(); return }
-    if (this.closed || !this.vad) return
-    await this.vad.pause()
+    if (this.closed || (!this.vad && !this.browserVoice)) return
+    await this.vad?.pause()
     this.callbacks.onStatus('listening', 'Hold the microphone button to speak; release to send.')
     this.input.push({ type: 'message', role: 'user', content: `Begin checkpoint “${brief.checkpoint.title}”. Follow the checkpoint brief, show the first cited page, and start with its specific focus.` })
     void this.respond()
@@ -188,6 +201,7 @@ export class HybridTutor {
 
   async setMicMuted(muted: boolean) {
     if (this.closed || this.paused || this.micMuted === muted) return !this.closed && !this.paused
+    if (this.browserVoice) return this.setBrowserMic(muted)
     if (muted) {
       this.micMuted = true
       const request = ++this.pushToTalkRequest
@@ -233,7 +247,45 @@ export class HybridTutor {
     void this.respond()
   }
 
+  private setBrowserMic(muted: boolean) {
+    this.micMuted = muted
+    if (muted) {
+      this.recognition?.stop()
+      return true
+    }
+    const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!Ctor) { this.micMuted = true; this.callbacks.onStatus('error', 'This browser has no speech recognition. Type your question instead.'); return false }
+    this.interruptedForInput = this.isBusy()
+    if (this.interruptedForInput) this.interrupt()
+    const recognition = new Ctor()
+    recognition.lang = 'en-US'
+    recognition.interimResults = false
+    recognition.continuous = true
+    this.recognized = ''
+    const turn = this.turnId
+    recognition.onresult = (event: any) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) if (event.results[i].isFinal) this.recognized += ` ${event.results[i][0].transcript}`
+    }
+    recognition.onerror = (event: any) => { if (event.error !== 'aborted' && event.error !== 'no-speech') this.callbacks.onStatus('error', `Speech recognition failed: ${event.error}`) }
+    recognition.onend = () => {
+      if (this.recognition === recognition) this.recognition = null
+      const text = this.recognized.trim()
+      this.recognized = ''
+      if (this.closed || this.paused) return
+      if (text) this.acceptTranscript(text, turn === this.turnId ? turn : this.turnId)
+      else if (this.interruptedForInput) this.continueAfterUnrecognizedInterruption()
+      else this.callbacks.onStatus('listening')
+    }
+    this.recognition = recognition
+    try { recognition.start() } catch { /* already started */ }
+    this.callbacks.onStatus('listening', 'Listening while held. Release to send.')
+    return true
+  }
+
   close() {
+    this.recognition?.abort()
+    this.recognition = null
+    if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel()
     this.closed = true
     this.paused = false
     this.pendingResponse = false
@@ -252,6 +304,7 @@ export class HybridTutor {
   }
 
   private interrupt() {
+    if (this.browserVoice && typeof speechSynthesis !== 'undefined') speechSynthesis.cancel()
     const interruptedAt = performance.now()
     const wasPlaying = this.sources.size > 0 || this.ttsControllers.size > 0
     this.interruptionAt = wasPlaying ? interruptedAt : 0
@@ -586,6 +639,7 @@ export class HybridTutor {
 
   private async speak(text: string, turn: number) {
     if (!text.trim() || text.length > 900 || turn !== this.turnId || this.closed) return false
+    if (this.browserVoice) return this.speakInBrowser(text, turn)
     const controller = new AbortController()
     this.ttsControllers.add(controller)
     const id = String(++this.speechSequence)
@@ -608,6 +662,19 @@ export class HybridTutor {
       this.startPendingResponse()
     }
     return false
+  }
+
+  private speakInBrowser(text: string, turn: number) {
+    return new Promise<boolean>(resolve => {
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.rate = 1.03
+      const voice = speechSynthesis.getVoices().find(v => /en(-|_)/i.test(v.lang) && /natural|premium|enhanced|samantha|daniel/i.test(v.name)) || speechSynthesis.getVoices().find(v => /^en/i.test(v.lang))
+      if (voice) utterance.voice = voice
+      this.callbacks.onStatus('speaking')
+      utterance.onend = () => { this.startPendingResponse(); resolve(turn === this.turnId && !this.closed) }
+      utterance.onerror = () => { this.startPendingResponse(); resolve(false) }
+      speechSynthesis.speak(utterance)
+    })
   }
 
   private playPcm(input: string | ArrayBuffer) {
@@ -707,6 +774,10 @@ export class HybridTutor {
     }
     return { output, context, continueAutomatically }
   }
+}
+
+function browserSpeechAvailable() {
+  return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined'
 }
 
 function waitForIce(peer: RTCPeerConnection) {
