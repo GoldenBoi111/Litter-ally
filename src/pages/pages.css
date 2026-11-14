@@ -7,6 +7,7 @@
 .page-head { display: grid; gap: 8px; margin-bottom: 28px; max-width: 760px; }
 .page-head h1 { margin: 0; font-family: var(--font-script); font-size: 40px; line-height: 1.1; font-weight: 700; }
 .page-head p { margin: 0; font-family: var(--font-family-body); font-size: 15px; color: #57534e; }
+.page-head .review-progress { font: 12px var(--font-mono); color: #57534e; }
 .page .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
 .page .empty { font-family: var(--font-script); font-size: 22px; color: #78716c; }
 
@@ -37,6 +38,7 @@
   align-self: flex-start; font: 600 10px var(--font-mono); letter-spacing: .06em; padding: 2px 7px;
   background: var(--desk-highlight, #fef08a); border: 1.5px solid var(--desk-stroke, #2d2d2a); border-radius: 3px 6px 3px 5px;
 }
+.review-check { align-self: flex-start; font: 600 11px var(--font-family-body); color: #315c40; }
 
 .new-project { max-width: 520px; display: grid; gap: 12px; margin-bottom: 30px; }
 .new-project label { display: grid; gap: 4px; font: 600 13px var(--font-family-body); }
@@ -60,7 +62,7 @@
 
 /* Lesson dock + captions (replaces the tutor side panel). */
 .lesson-dock {
-  position: absolute; left: 50%; top: 14px; translate: -50% 0; z-index: 400;
+  position: absolute; left: 50%; bottom: 18px; translate: -50% 0; z-index: 400;
   display: flex; align-items: center; gap: 4px; padding: 5px 6px; max-width: calc(100% - 32px);
   background: var(--desk-card, #fffdf9); border: 2px solid var(--desk-stroke, #2d2d2a);
   border-radius: 14px 6px 12px 5px / 6px 12px 5px 14px; box-shadow: 0 6px 18px rgb(0 0 0 / .12);
