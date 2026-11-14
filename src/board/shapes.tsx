@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from 'react'
 import { HTMLContainer, Polyline2d, Rectangle2d, ShapeUtil, T, Vec, useEditor, useValue, type TLShape, type TLShapeId } from 'tldraw'
 import { IndexCard, IndexCardContent, IndexCardFooter, IndexCardHeader, IndexCardTitle } from '@/components/ui/index-card'
 import { LabelTag, LabelTagTitle } from '@/components/ui/label-tag'
+import { Paper } from '@/components/ui/paper'
 import { pinPoint, sagCurve, type Pt } from './sag'
 import { CUT_DISSOLVE_MS, CUT_FALL_MS, CUT_TOTAL_MS, cutRopes, ropePath, stepRope } from './cutRope'
 
@@ -35,12 +36,27 @@ export class SourceCardUtil extends ShapeUtil<SourceCardShape> {
   }
   component(shape: SourceCardShape) {
     const { w, h, title, kind, segments, sourceId, summary } = shape.props
+    const role = shape.meta.documentRole === 'process' ? 'process' : 'content'
+    const meta = `${kind.toUpperCase()} · ${segments} ${segments === 1 ? 'section' : 'sections'}`
+    if (role === 'process') {
+      // Process guides read as a sticky note stuck on the board: they steer lessons rather than being learned.
+      return (
+        <HTMLContainer className="board-card board-card-process" style={{ width: w, height: h }}>
+          <Paper stock="sticky-yellow" seed={sourceId} size={[w, h]} rules="none" className="board-sticky select-none">
+            <span className="board-role-tag board-role-tag-process">Process guide</span>
+            <div className="board-sticky-title" title={title}>{title}</div>
+            <div className="board-card-summary">{summary || 'Reading this source…'}</div>
+            <div className="board-sticky-footer"><span>{meta}</span><span>Guides lessons</span></div>
+          </Paper>
+        </HTMLContainer>
+      )
+    }
     return (
-      <HTMLContainer className="board-card" style={{ width: w, height: h }}>
+      <HTMLContainer className="board-card board-card-content" style={{ width: w, height: h }}>
         <IndexCard seed={sourceId} size={[w, h]} className="h-full min-h-0 max-w-none select-none">
-          <IndexCardHeader><IndexCardTitle title={title}>{title}</IndexCardTitle></IndexCardHeader>
+          <IndexCardHeader><IndexCardTitle title={title}>{title}</IndexCardTitle><span className="board-role-tag">Content</span></IndexCardHeader>
           <IndexCardContent className="board-card-summary">{summary || 'Reading this source…'}</IndexCardContent>
-          <IndexCardFooter><span>{kind.toUpperCase()} · {segments} {segments === 1 ? 'section' : 'sections'}</span><span>Double-click to learn</span></IndexCardFooter>
+          <IndexCardFooter><span>{meta}</span><span>Double-click to learn</span></IndexCardFooter>
         </IndexCard>
       </HTMLContainer>
     )
@@ -155,8 +171,8 @@ function RedString({ shape }: { shape: RedStringShape }) {
       </svg>
       {relation && (
         <div className="board-string-tag" style={{ left: mid.x, top: mid.y }} data-relation={relation}>
-          <LabelTag shape="round" string={14} stock={relation === 'contradicts' ? 'sticky-pink' : 'kraft'} seed={shape.id} className="w-auto min-h-0 px-3 pt-9 pb-2">
-            <LabelTagTitle className="text-base">{relation}</LabelTagTitle>
+          <LabelTag shape="price" string={14} stock={relation === 'contradicts' ? 'sticky-pink' : 'kraft'} seed={shape.id} className="w-auto min-h-0 items-center px-4 pt-9 pb-2.5">
+            <LabelTagTitle className="whitespace-nowrap text-base leading-tight">{relation}</LabelTagTitle>
           </LabelTag>
         </div>
       )}
