@@ -3,6 +3,7 @@ import { AIMD, levelLabel } from './aimd'
 import type { DiagnosticTurn } from './learning'
 import { readApiJson } from './storage'
 import './diagnostic.css'
+import { microphoneErrorMessage } from './micAccess'
 
 type Props = {
   title: string
@@ -171,8 +172,8 @@ export function DiagnosticChat({ title, turns, busy, done, level, planReady, err
       setPhase('listening')
       if (stopRequested.current) next.stop() // Space was released before the mic opened
       setTimeout(() => { if (recorder.current === next && next.state === 'recording') next.stop() }, MAX_SECONDS * 1000)
-    } catch {
-      setMicError('Allow microphone access to answer by voice.')
+    } catch (reason) {
+      setMicError(microphoneErrorMessage(reason) || 'Allow microphone access to answer by voice.')
       setPhase('idle')
     }
   }
