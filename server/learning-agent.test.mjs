@@ -28,31 +28,38 @@ mock.module('deepagents', {
     },
   },
 })
+let lastPlainAgentOptions
 mock.module('langchain', {
   namedExports: {
     tool: (invoke, options) => ({ ...options, invoke }),
+    createAgent: options => {
+      lastPlainAgentOptions = options
+      return { invoke: async (input, invokeOptions) => { lastAgentInput = input; lastInvokeOptions = invokeOptions; return nextResult } }
+    },
   },
 })
 
-const { createBackgroundSearchTool, createLearningDiagnostic, extractTaughtKnowledge, isReputableSourceUrl } = await import('./learning-agent.mjs')
+const { createAdaptiveTeachingPlan, createBackgroundSearchTool, isReputableSourceUrl } = await import('./learning-agent.mjs')
 
-test('diagnosis calls a read-only deep agent with the source and medium reasoning', async () => {
-  nextResult = { structuredResponse: { goal: 'ignored', questions: [
-    { concept: 'mechanism', question: 'Why does the mechanism change the outcome?' },
-    { concept: 'evidence', question: 'What evidence supports the main result?' },
-  ] } }
+// A minimal plan that satisfies the planner's schema, so the agent runner's routing can be tested.
+const concept = id => ({ id, name: id, explanation: `About ${id}.`, sourcePages: [1], prerequisites: [] })
+const session = id => ({ title: id, minutes: 10, goal: 'g', concepts: [id], conceptIds: [id], activities: [], narration: 'n'.repeat(160), sourcePages: [1], pageFocus: 'p', diagrams: [{ title: 'd', purpose: 'Shows how the idea works.', kind: 'flow' }], checkForUnderstanding: 'c', backgroundNotes: '', backgroundSources: [] })
+const validPlan = { title: 'Sample', thesis: 't', audience: 'a', totalMinutes: 20, learningObjectives: ['o'], prerequisites: [], conceptMap: [concept('alpha'), concept('beta')], sessions: [session('alpha'), session('beta')], misconceptions: [], finalChallenge: '' }
+const planFor = input => createAdaptiveTeachingPlan({ apiKey: 'test-key', model: 'gpt-6-luna', diagnostic: { goal: 'Learn it.', questions: [] }, answers: [], ...input })
 
-  const result = await createLearningDiagnostic({
-    apiKey: 'test-key', model: 'gpt-6-luna', title: 'Sample', text: '[Page 1 of 3]\nFirst page\n\n[Page 2 of 3]\nSecond page\n\n[Page 3 of 3]\nThird page', pageCount: 3,
-  })
+test('planner agent gets small sources inline without file tools and uses low reasoning', async () => {
+  nextResult = { structuredResponse: validPlan }
 
-  assert.equal(result.goal, 'Understand the selected material from its key ideas through its evidence and implications.')
-  assert.deepEqual(lastAgentInput.files['/paper/pages/page-001.txt'].content, ['[Page 1 of 3]\nFirst page'])
-  assert.deepEqual(lastAgentInput.files['/paper/pages/page-003.txt'].content, ['[Page 3 of 3]\nThird page'])
-  assert.match(lastAgentInput.files['/paper/source-index.txt'].content[0], /page-003\.txt/)
-  assert.equal(lastInvokeOptions.recursionLimit, 22)
-  assert.equal(lastAgentOptions.middleware[0].options.permissions[0].operations[0], 'read')
-  assert.deepEqual(lastAgentOptions.model.options.reasoning, { effort: 'medium' })
+  const result = await planFor({ title: 'Sample', text: '[Page 1 of 3]\nFirst page\n\n[Page 2 of 3]\nSecond page\n\n[Page 3 of 3]\nThird page', pageCount: 3 })
+
+  assert.equal(result.title, 'Sample')
+  // Small sources go inline to a plain agent: no file tools, no files in state.
+  assert.equal(lastAgentInput.files, undefined)
+  assert.equal(lastInvokeOptions.recursionLimit, 20)
+  assert.deepEqual(lastPlainAgentOptions.model.options.reasoning, { effort: 'low' })
+  const firstMessage = lastAgentInput.messages[0].content
+  assert.match(firstMessage, /already fully read/)
+  assert.match(firstMessage, /\[Page 2 of 3\]\nSecond page/)
 })
 
 test('background search keeps only reputable https citations and stops after four searches', async () => {
@@ -85,19 +92,28 @@ test('background search keeps only reputable https citations and stops after fou
   }
 })
 
-test('taught knowledge rejects page citations outside the checkpoint', async () => {
-  nextResult = { structuredResponse: { propositions: [{
-    id: 'mechanism', name: 'Mechanism', statement: 'The mechanism changes the outcome.', aliases: [], existingId: null, sourcePages: [3],
-  }], chains: [] } }
-
-  await assert.rejects(extractTaughtKnowledge({
-    apiKey: 'test-key', model: 'gpt-6-luna', title: 'Sample', text: '[Page 2]\nEvidence', pageCount: 3,
-    checkpoint: { title: 'Mechanism', sourcePages: [2] }, teacherTranscript: 'The tutor explained the mechanism clearly in enough detail.', priorKnowledge: { propositions: [], chains: [] },
-  }), /outside the current lesson context/)
-})
 
 test('source filter accepts reputable academic hosts and rejects lookalikes', () => {
   assert.equal(isReputableSourceUrl('https://pmc.ncbi.nlm.nih.gov/articles/PMC123/'), true)
   assert.equal(isReputableSourceUrl('https://nih.gov.attacker.example/article'), false)
   assert.equal(isReputableSourceUrl('http://nih.gov/article'), false)
+})
+
+test('pages are grouped into batches by count and size', async () => {
+  const { batchPages } = await import('./learning-agent.mjs')
+  assert.deepEqual(batchPages(Array.from({ length: 20 }, () => 'x')).map(b => b.path), [
+    '/paper/batches/pages-001-008.txt', '/paper/batches/pages-009-016.txt', '/paper/batches/pages-017-020.txt',
+  ])
+  assert.equal(batchPages(['a'.repeat(20_000), 'b'.repeat(20_000), 'c']).length, 2)
+})
+
+test('large sources keep batched read-only files on the deep agent', async () => {
+  nextResult = { structuredResponse: validPlan }
+  const page = 'word '.repeat(6000)
+  const text = Array.from({ length: 6 }, (_, i) => `[Page ${i + 1} of 6]\n${page}`).join('\n\n')
+  await planFor({ title: 'Big', text, pageCount: 6 })
+  assert.ok(lastAgentInput.files['/paper/source-index.txt'])
+  assert.match(lastAgentInput.files['/paper/batches/pages-001-001.txt'].content[0], /^\[Page 1 of 6\]/)
+  assert.equal(lastAgentOptions.middleware[0].options.permissions[0].operations[0], 'read')
+  assert.deepEqual(lastAgentOptions.model.options.reasoning, { effort: 'low' })
 })

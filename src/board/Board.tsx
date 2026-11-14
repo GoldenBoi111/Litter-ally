@@ -1,17 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './board.css'
 import { createShapeId, useEditor, useValue, type Editor, type TLShape } from 'tldraw'
 import type { ImportedPaper } from '@/storage'
 import { PersistentTldraw } from '@/persistentCanvas'
-import { loadProjects, PROJECTS_UPDATED_EVENT, type Project, type ProjectSynthesis } from '@/projects'
+import type { ProjectSynthesis } from '@/projects'
 import { CARD_H, CARD_W, RELATIONS, boardShapeUtils, type Relation } from './shapes'
 import { CUT_TOTAL_MS } from './cutRope'
+import { desiredConnections, sourcePairKey } from './connections'
+import { openSpotNear } from './placement'
 
 const GRID = { cols: 4, dx: CARD_W + 90, dy: CARD_H + 120 }
 
 /** First grid cell whose card slot is empty, so new sources never land on top of moved ones. */
-function freeSpot(editor: Editor) {
-  const taken = editor.getCurrentPageShapes().filter(s => s.type === 'source-card').map(s => editor.getShapePageBounds(s)!)
+function freeSpot(editor: Editor, preferred?: { x: number; y: number }, ignoreId?: TLShape['id']) {
+  const taken = editor.getCurrentPageShapes().filter(s => s.type !== 'red-string' && s.id !== ignoreId).map(s => editor.getShapePageBounds(s)!).filter(Boolean)
+  if (preferred) return openSpotNear(taken, preferred, CARD_W, CARD_H)
   for (let i = 0; ; i++) {
     const x = (i % GRID.cols) * GRID.dx, y = Math.floor(i / GRID.cols) * GRID.dy
     if (!taken.some(b => b.x < x + CARD_W && x < b.x + b.w && b.y < y + CARD_H && y < b.y + b.h)) return { x, y }
@@ -27,8 +30,9 @@ function syncCards(editor: Editor, papers: ImportedPaper[], summaries: Record<st
   editor.run(() => {
     editor.deleteShapes(cards.filter(c => !live.has(c.props.sourceId)).map(c => c.id))
     for (const { paper, id } of added) {
+      const spot = freeSpot(editor)
       editor.createShape({
-        id, type: 'source-card', ...freeSpot(editor),
+        id, type: 'source-card', ...spot, meta: { autoX: spot.x, autoY: spot.y, pendingCluster: true },
         props: { sourceId: paper.id, title: paper.title, kind: paper.sourceKind || 'pdf', segments: paper.pageCount, imported: new Date(paper.importedAt).toLocaleDateString(), summary: summaries[paper.id] || '' },
       })
     }
@@ -39,6 +43,62 @@ function syncCards(editor: Editor, papers: ImportedPaper[], summaries: Record<st
     if (added.length) editor.sendToBack(added.map(a => a.id))
   }, { history: 'ignore' })
   return added.length
+}
+
+/** Reconcile only generated strings; hand-tied strings and learner overrides remain theirs. */
+function syncConnections(editor: Editor, synthesis: ProjectSynthesis, hiddenPairs: string[]) {
+  const cards = editor.getCurrentPageShapes().filter(s => s.type === 'source-card')
+  const bySource = new Map(cards.map(card => [card.props.sourceId, card]))
+  const byShape = new Map(cards.map(card => [card.id, card.props.sourceId]))
+  const strings = editor.getCurrentPageShapes().filter(s => s.type === 'red-string')
+  const manual = new Set(strings.filter(s => !s.meta.autoPair || s.meta.manualOverride).map(s => {
+    const a = byShape.get(s.props.fromId as TLShape['id']), b = byShape.get(s.props.toId as TLShape['id'])
+    return a && b ? sourcePairKey(a, b) : ''
+  }))
+  const desired = desiredConnections(synthesis.connections, new Set(bySource.keys()), new Set(hiddenPairs), manual)
+  const kept = new Set<string>()
+  editor.run(() => {
+    for (const string of strings) {
+      const pair = string.meta.autoPair
+      if (typeof pair !== 'string' || string.meta.manualOverride) continue
+      const connection = desired.get(pair)
+      if (!connection || kept.has(pair)) { editor.deleteShapes([string.id]); continue }
+      kept.add(pair)
+      const fromId = bySource.get(connection.leftId)!.id, toId = bySource.get(connection.rightId)!.id
+      if (string.props.fromId !== fromId || string.props.toId !== toId || string.props.relation !== connection.relation || string.meta.reason !== connection.reason) {
+        editor.updateShape({ id: string.id, type: 'red-string', props: { fromId, toId, relation: connection.relation }, meta: { ...string.meta, reason: connection.reason } })
+      }
+    }
+    for (const [pair, connection] of desired) {
+      if (kept.has(pair)) continue
+      editor.createShape({ id: createShapeId(), type: 'red-string', x: 0, y: 0,
+        props: { fromId: bySource.get(connection.leftId)!.id, toId: bySource.get(connection.rightId)!.id, relation: connection.relation },
+        meta: { autoPair: pair, reason: connection.reason, tiedAt: desired.size <= 24 ? Date.now() : 0 },
+      })
+    }
+  }, { history: 'ignore' })
+}
+
+/** Give a newly imported, untouched card one nearby slot once its relationships are known. */
+function clusterNewCards(editor: Editor, synthesis: ProjectSynthesis) {
+  let moved = false
+  for (const card of editor.getCurrentPageShapes().filter(s => s.type === 'source-card' && s.meta.pendingCluster)) {
+    const current = editor.getShape(card.id)
+    if (!current || current.type !== 'source-card') continue
+    if (current.x !== current.meta.autoX || current.y !== current.meta.autoY) {
+      editor.updateShape({ id: current.id, type: 'source-card', meta: { ...current.meta, pendingCluster: false } })
+      continue
+    }
+    const neighbors = synthesis.connections.flatMap(link => link.leftId === current.props.sourceId ? [link.rightId] : link.rightId === current.props.sourceId ? [link.leftId] : [])
+      .map(id => editor.getCurrentPageShapes().find(s => s.type === 'source-card' && s.props.sourceId === id)).filter((shape): shape is typeof card => !!shape)
+    if (!neighbors.length) continue
+    const preferred = { x: neighbors.reduce((sum, item) => sum + item.x, 0) / neighbors.length, y: neighbors.reduce((sum, item) => sum + item.y, 0) / neighbors.length }
+    const close = Math.abs(current.x - preferred.x) <= GRID.dx && Math.abs(current.y - preferred.y) <= GRID.dy
+    const spot = close ? { x: current.x, y: current.y } : freeSpot(editor, preferred, current.id)
+    editor.updateShape({ id: current.id, type: 'source-card', ...spot, meta: { ...current.meta, pendingCluster: false } })
+    moved ||= spot.x !== current.x || spot.y !== current.y
+  }
+  return moved
 }
 
 function tie(editor: Editor, [a, b]: TLShape[]) {
@@ -68,38 +128,64 @@ function SelectionActions() {
     return <div className="board-actions" role="toolbar" aria-label="Selection actions"><button onClick={() => tie(editor, cards)}>Tie with string</button></div>
   }
   if (!string) return null
-  const set = (relation: Relation) => editor.updateShape({ id: string.id, type: 'red-string', props: { relation } })
+  const set = (relation: Relation) => editor.updateShape({ id: string.id, type: 'red-string', props: { relation }, meta: { ...string.meta, manualOverride: true, reason: '' } })
   return (
     <div className="board-actions" role="toolbar" aria-label="String relation">
       {RELATIONS.map(r => <button key={r} aria-pressed={string.props.relation === r} onClick={() => set(string.props.relation === r ? '' : r)}>{r}</button>)}
       <button onClick={() => cutString(editor, string)}>Cut string</button>
+      {typeof string.meta.reason === 'string' && string.meta.reason && <span className="board-action-reason">{string.meta.reason}</span>}
     </div>
   )
 }
 
-export function Board({ canvasKey, papers, summaries, onOpen, onCompare, onAdd }: { canvasKey: string; papers: ImportedPaper[]; summaries: Record<string, string>; onOpen: (sourceId: string) => void; onCompare: (leftId: string, rightId: string) => void; onAdd: () => void }) {
+export function Board({ canvasKey, papers, summaries, synthesis, hiddenConnectionPairs, analysisStatus, analysisError, onRetry, onHideConnection, onRestoreConnection, onRestoreHiddenConnections, onOpen, onCompare, onAdd }: {
+  canvasKey: string; papers: ImportedPaper[]; summaries: Record<string, string>; synthesis: ProjectSynthesis | null
+  hiddenConnectionPairs: string[]; analysisStatus: string | null; analysisError: string | null
+  onRetry: () => void; onHideConnection: (pair: string) => void; onRestoreConnection: (pair: string) => void; onRestoreHiddenConnections: () => void
+  onOpen: (sourceId: string) => void; onCompare: (leftId: string, rightId: string) => void; onAdd: () => void
+}) {
   const [editor, setEditor] = useState<Editor | null>(null)
-  const [synthesis, setSynthesis] = useState<ProjectSynthesis | null>(null)
+  const fitted = useRef(false)
+  const syncing = useRef(false)
+  const hiddenRef = useRef(new Set(hiddenConnectionPairs))
+  hiddenRef.current = new Set(hiddenConnectionPairs)
 
   useEffect(() => {
-    if (editor && syncCards(editor, papers, summaries)) editor.zoomToFit({ animation: { duration: 320 } })
+    if (!editor) return
+    syncing.current = true
+    let added = 0
+    try { added = syncCards(editor, papers, summaries) } finally { syncing.current = false }
+    if (papers.length && (!fitted.current || added)) editor.zoomToFit({ animation: { duration: 320 } })
+    if (papers.length) fitted.current = true
   }, [editor, papers, summaries])
 
   useEffect(() => {
-    let live = true
-    const select = (projects: Project[]) => projects.find(project => canvasKey === `board-${project.id}`)?.synthesis || null
-    const onProjectsUpdated = (event: Event) => setSynthesis(select((event as CustomEvent<Project[]>).detail))
-    window.addEventListener(PROJECTS_UPDATED_EVENT, onProjectsUpdated)
-    loadProjects().then(projects => { if (live) setSynthesis(select(projects)) }).catch(() => { if (live) setSynthesis(null) })
-    return () => { live = false; window.removeEventListener(PROJECTS_UPDATED_EVENT, onProjectsUpdated) }
-  }, [canvasKey])
+    if (!editor || !synthesis) return
+    syncing.current = true
+    try { syncConnections(editor, synthesis, hiddenConnectionPairs) } finally { syncing.current = false }
+    if (clusterNewCards(editor, synthesis)) editor.zoomToFit({ animation: { duration: 320 } })
+  }, [editor, synthesis, hiddenConnectionPairs])
 
   useEffect(() => {
     if (!editor) return
     const offDelete = editor.sideEffects.registerAfterDeleteHandler('shape', shape => {
+      if (shape.type === 'red-string' && typeof shape.meta.autoPair === 'string' && !syncing.current) {
+        hiddenRef.current.add(shape.meta.autoPair)
+        onHideConnection(shape.meta.autoPair)
+      }
       if (shape.type !== 'source-card') return
       const loose = editor.getCurrentPageShapes().filter(s => s.type === 'red-string' && (s.props.fromId === shape.id || s.props.toId === shape.id))
-      if (loose.length) editor.deleteShapes(loose.map(s => s.id))
+      if (loose.length) {
+        const wasSyncing = syncing.current
+        syncing.current = true
+        try { editor.deleteShapes(loose.map(s => s.id)) } finally { syncing.current = wasSyncing }
+      }
+    })
+    const offCreate = editor.sideEffects.registerAfterCreateHandler('shape', shape => {
+      if (shape.type === 'red-string' && typeof shape.meta.autoPair === 'string' && hiddenRef.current.has(shape.meta.autoPair)) {
+        hiddenRef.current.delete(shape.meta.autoPair)
+        onRestoreConnection(shape.meta.autoPair)
+      }
     })
     // HTML shapes report double-clicks as hitting the canvas, so find the card under the pointer.
     const onEvent = (info: { name: string; phase?: string }) => {
@@ -108,8 +194,8 @@ export function Board({ canvasKey, papers, summaries, onOpen, onCompare, onAdd }
       if (card) onOpen(card.props.sourceId)
     }
     editor.on('event', onEvent as never)
-    return () => { offDelete(); editor.off('event', onEvent as never) }
-  }, [editor, onOpen])
+    return () => { offDelete(); offCreate(); editor.off('event', onEvent as never) }
+  }, [editor, onOpen, onHideConnection, onRestoreConnection])
 
   return (
     <div className="board">
@@ -122,8 +208,10 @@ export function Board({ canvasKey, papers, summaries, onOpen, onCompare, onAdd }
           if (import.meta.env.DEV) Object.assign(window, { boardEditor: ed }) // for local UI checks
         }}
       />
-      {synthesis && <aside className="board-connections" aria-label="How project sources connect">
-        <h2>How these sources connect</h2>
+      {papers.length > 0 && <button className="board-fit" onClick={() => editor?.zoomToFit({ animation: { duration: 320 } })}>Fit board</button>}
+      {(analysisError || analysisStatus) && <div className="board-analysis" role="status">{analysisError ? <>{analysisError} <button onClick={onRetry}>Retry connections</button></> : analysisStatus}</div>}
+      {synthesis && <details className="board-connections">
+        <summary>Connections ({synthesis.connections.length})</summary>
         <p>{synthesis.synthesis}</p>
         {synthesis.connections.length > 0 && <ul>{synthesis.connections.map((connection, index) => {
           const left = papers.find(paper => paper.id === connection.leftId)
@@ -136,7 +224,8 @@ export function Board({ canvasKey, papers, summaries, onOpen, onCompare, onAdd }
             </button>
           </li>
         })}</ul>}
-      </aside>}
+        {hiddenConnectionPairs.length > 0 && <button className="board-restore" onClick={onRestoreHiddenConnections}>Restore {hiddenConnectionPairs.length} hidden {hiddenConnectionPairs.length === 1 ? 'connection' : 'connections'}</button>}
+      </details>}
       {!papers.length && (
         <div className="board-empty">
           <p>Your board is empty.</p>

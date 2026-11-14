@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time local voice setup for Apple Silicon Macs: faster-whisper (speech-to-text), aiortc (WebRTC)
+# One-time local voice setup for Apple Silicon Macs: NVIDIA Parakeet (speech-to-text; faster-whisper kept as a fallback), aiortc (WebRTC)
 # and Qwen3-TTS running on MLX (text-to-speech). Creates .voice-mac/ and warms both models.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -18,6 +18,6 @@ fi
 "$UV" pip install --python .voice-mac/bin/python -r server/requirements-voice-rtc.txt faster-whisper numpy mlx-audio
 
 echo "Downloading and warming models (first run fetches about 1.6 GB)…"
-.voice-mac/bin/python -c "from faster_whisper import WhisperModel; WhisperModel('${LOCAL_STT_MODEL:-base.en}', device='cpu', compute_type='int8')"
+.voice-mac/bin/python -c "import onnx_asr; onnx_asr.load_model('nemo-parakeet-tdt-0.6b-v2', quantization='int8', providers=['CPUExecutionProvider'])"
 .voice-mac/bin/python -c "from mlx_audio.tts.utils import load_model; load_model('${MAC_TTS_MODEL:-mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-6bit}')"
 echo "Done. Start everything with: npm run app:mac"

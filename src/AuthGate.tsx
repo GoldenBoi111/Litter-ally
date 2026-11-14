@@ -83,5 +83,5 @@ export function AuthGate() {
 
   if (user === undefined) return <main className="auth-desk" aria-busy="true" />
   if (!user) return <AuthScreen onSignedIn={next => void signedIn(next)} />
-  return <App key={user.id} user={user} onSignOut={() => void signOut()} notice={notice} />
+  return <App key={user.id} user={user} onUserUpdated={setUser} onSignOut={() => void signOut()} notice={notice} />
 }

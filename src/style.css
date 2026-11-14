@@ -127,3 +127,36 @@
 .auth-switch{margin:14px 0 0;font-size:14px;color:var(--ll-ink-soft)}
 .auth-switch button{border:0;background:none;padding:0;font:inherit;font-weight:600;color:var(--ll-ink-you);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .auth-switch button:focus-visible{outline:2px solid var(--ll-ink);outline-offset:2px;border-radius:2px}
+
+/* Keep scroll behavior while removing visible scrollbars across the app. */
+*{scrollbar-width:none}
+*::-webkit-scrollbar{display:none}
+
+.app-shell{height:auto;min-height:100vh;overflow-x:hidden;overflow-y:auto}
+.workspace{min-height:calc(100vh - 56px);flex:1 0 auto}
+.crumbs{display:flex;align-items:center;flex:1;gap:14px;min-width:0}
+.top-actions{margin-left:auto;gap:12px}
+.account-overlay{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:20px;background:rgb(24 29 48 / .42);backdrop-filter:blur(3px)}
+.account-dialog{width:min(500px,100%);max-height:min(90vh,720px);overflow:auto;padding:24px;background:var(--ll-paper);color:var(--ll-ink);border:1px solid var(--ll-pencil-mark);box-shadow:0 18px 60px rgb(24 29 48 / .24)}
+.account-dialog-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.account-dialog-header h2{margin:0;font:600 32px/1.15 var(--font-script)}
+.account-eyebrow{margin:0 0 4px;color:var(--ll-ink-you);font:500 10px/1.4 var(--font-mono);letter-spacing:.09em;text-transform:uppercase}
+.account-intro{margin:12px 0 22px;color:var(--ll-ink-soft);font-size:14px}
+.account-form{display:grid;gap:12px}
+.account-form label{display:grid;gap:5px;color:var(--ll-ink);font-size:13px;font-weight:600}
+.account-form input[readonly]{color:var(--ll-ink-soft);background:var(--ll-paper-shade)}
+.account-help{margin:-7px 0 2px;color:var(--ll-pencil-text);font-size:12px}
+.account-success{margin:0;color:#2f6b45;font-size:13px}
+.account-actions{display:flex;gap:8px;margin-top:3px}
+.account-session{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:24px;padding-top:18px;border-top:1px solid var(--ll-pencil-mark)}
+.account-session b{font-size:14px}
+.account-session p{margin:4px 0 0;color:var(--ll-pencil-text);font-size:12px}
+@media(max-width:420px){.account-dialog{padding:19px}}
+
+.crumbs .brand{flex:none;padding:0;border:0;background:transparent}
+.crumbs .wordmark{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.crumbs .wordmark-text{font:700 22px var(--font-script)}
+.crumbs .crumb-link,.crumb-current{min-width:0;max-width:min(32vw,360px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crumb-sep{flex:none;color:var(--ll-ink-muted);opacity:.5}
+.crumb-current{font-weight:600}
+@media(max-width:780px){.workspace{min-height:calc(100vh - 50px)}}

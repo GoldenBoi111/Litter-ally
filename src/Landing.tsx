@@ -1,20 +1,22 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
 import 'lenis/dist/lenis.css'
 import { Button } from './components/ui/button'
+import { Paper } from './components/ui/paper'
 import { LogoMark } from './Logo'
+import { WidgetCard, type WidgetData } from './lessonWidgets'
 import './landing.css'
 
 gsap.registerPlugin(ScrollTrigger)
 
 /** Idea cards on the board, in world units (the scene is drawn on a 640x520 desk). `from` is what each idea lifts out of:
-    a highlight in the paper, or another source on the desk, so the board visibly pulls from more than one kind of source. */
+    a highlight in the paper or the lecture video on the desk, so the board visibly pulls from more than one kind of source. */
 const IDEAS = [
   { id: 'roots', from: '.ls-doc mark', x: -40, y: 10, w: 200, label: 'Fungal threads link neighbouring roots' },
   { id: 'feed', from: '.ls-video', x: 470, y: 40, w: 196, label: 'Older trees feed shaded seedlings' },
-  { id: 'trade', from: '.ls-slide', x: 440, y: 380, w: 200, label: 'Sugar and nitrogen travel the links' },
+  { id: 'trade', from: '.ls-doc p:nth-of-type(4) mark', x: 440, y: 380, w: 200, label: 'Sugar and nitrogen travel the links' },
 ] as const
 const HUB = { x: 190, y: 190, w: 220 }
 
@@ -81,6 +83,20 @@ const USES = [
   },
 ]
 
+/** Real lesson widgets lying on the desk in the hero, filled from the paper on it: what the agents hand back from a source.
+    Positions are in desk units; they fill in on load like they do in a lesson, then clear away when the story starts. */
+const HERO_WIDGETS: Array<{ id: string; x: number; y: number; w: number; h: number; tilt: number; data: WidgetData }> = [
+  { id: 'shade', x: -160, y: -150, w: 300, h: 210, tilt: -4, data: {
+    kind: 'bar', title: 'Sugar to seedlings', labels: ['Sun', 'Partial', 'Shade'],
+    series: [{ name: 'Share of carbon', values: [4, 9, 16] }], rows: [], unit: '%' } },
+  { id: 'figures', x: 175, y: -215, w: 260, h: 150, tilt: 3, data: {
+    kind: 'stats', title: 'From p. 4', labels: ['trees on one fir', 'seedlings fed'],
+    series: [{ name: 'Figures', values: [47, 12] }], rows: [], unit: '' } },
+  { id: 'growth', x: -180, y: 110, w: 290, h: 160, tilt: 2, data: {
+    kind: 'timeline', title: 'A shaded seedling', labels: [], series: [],
+    rows: [['Year 1', 'Fungi link its roots'], ['Year 3', 'Fed by the old fir'], ['Year 8', 'Reaches the light']], unit: '' } },
+]
+
 /** Desk-scene camera stops: lying on the desk, reading, asking, then looking down at the board. */
 const CAMERA = {
   hero: { rotationX: 56, rotationZ: -24, x: -10, y: 20, scale: 1 },
@@ -98,6 +114,8 @@ type LandingProps = {
 export function Landing({ children, onSignIn }: LandingProps) {
   const root = useRef<HTMLElement>(null)
   const lenisRef = useRef<Lenis | null>(null)
+  // How far the hero widgets have filled in: widget i shows min(1, fill - i). Full when motion is reduced.
+  const [fill, setFill] = useState(HERO_WIDGETS.length)
 
   useLayoutEffect(() => {
     const el = root.current!
@@ -129,10 +147,12 @@ export function Landing({ children, onSignIn }: LandingProps) {
 
       // Hero state: everything flat on the desk, nothing asked yet.
       gsap.set(world, CAMERA.hero)
+      const filling = { value: 0 }
+      setFill(0)
       // GSAP folds the CSS translate/rotate base pose into its own transform, so lifted objects get explicit depths here.
-      gsap.set('.ls-note', { z: 8, rotationX: 0, rotationZ: 5, x: 34, y: 130 })
+      gsap.set('.ls-note', { z: 8, rotationX: 0, rotationZ: 5, x: 50, y: 130 })
       gsap.set('.ls-pencil', { z: 5, rotationZ: -14 })
-      gsap.set('.ls-answer', { x: 260, z: 0, autoAlpha: 0, rotationZ: 6 })
+      gsap.set('.ls-answer', { x: 260, z: 120, autoAlpha: 0, rotationZ: 6 })
       gsap.set('.ls-sheet-2', { rotationZ: 1.5, x: 6 })
       gsap.set('.ls-sheet-3', { rotationZ: -1, x: -4 })
       gsap.set('.ls-steps', { autoAlpha: 0 })
@@ -157,12 +177,13 @@ export function Landing({ children, onSignIn }: LandingProps) {
 
       // 1. Bring a source: the camera lifts off the desk to read the page.
       tl.to('.ls-hero-copy', { autoAlpha: 0, y: -50, duration: 0.8, ease: 'power1.in' }, 0)
+        .to(q('.ls-widget'), { autoAlpha: 0, z: 60, x: (index: number) => [-140, 0, -160][index], y: (index: number) => [0, -140, 0][index], duration: 0.8, ease: 'power1.in' }, 0)
         .fromTo('.ls-cue', { autoAlpha: 1 }, { autoAlpha: 0, duration: 0.3 }, 0)
         .to('.ls-steps', { autoAlpha: 1, duration: 0.5 }, 0.6)
         .to(world, { ...CAMERA.read, duration: 1.8, ease: 'power2.inOut' }, 0)
         .to('.ls-sheet-2', { rotationZ: 4, x: 22, y: 8, duration: 1.4, ease: 'power2.out' }, 0.3)
         .to('.ls-sheet-3', { rotationZ: -3.5, x: -18, y: 12, duration: 1.4, ease: 'power2.out' }, 0.3)
-        .fromTo(q('.ls-media'), { x: 0, rotationZ: 0 }, { x: (index: number) => [26, -22][index], rotationZ: (index: number) => [5, -6][index], duration: 1.4, ease: 'power2.out' }, 0.3)
+        .fromTo(q('.ls-media'), { x: 0, rotationZ: 0 }, { x: 26, rotationZ: 5, duration: 1.4, ease: 'power2.out' }, 0.3)
         .to('.ls-pencil', { x: -6, y: 4, rotationZ: -6, duration: 1.6, ease: 'power2.inOut' }, 0.2)
       chapter(0, 0.7)
       step(0, 0.7)
@@ -172,7 +193,7 @@ export function Landing({ children, onSignIn }: LandingProps) {
       step(1, 2.7)
       tl.to(world, { ...CAMERA.ask, duration: 2.6, ease: 'power1.inOut' }, 2.4)
       marks.forEach((mark, index) => tl.fromTo(mark, { '--hl': 0 }, { '--hl': 1, duration: 0.55, ease: 'power1.inOut' }, 2.7 + index * 0.45))
-      tl.to('.ls-note', { z: 90, rotationX: -14, rotationZ: 6, x: 44, y: -6, duration: 1.1, ease: 'power2.out' }, 3.5)
+      tl.to('.ls-note', { z: 90, rotationX: -14, rotationZ: 6, x: 80, y: 120, duration: 1.1, ease: 'power2.out' }, 3.5)
         .to('.ls-answer', { autoAlpha: 1, x: 0, z: 120, rotationZ: -2, duration: 1.2, ease: 'power3.out' }, 4.1)
         .fromTo('.ls-answer-ref', { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.6 }, 4.9)
 
@@ -227,6 +248,8 @@ export function Landing({ children, onSignIn }: LandingProps) {
         .from(q('.ls-media, .ls-sheet, .ls-doc'), { z: 240, autoAlpha: 0, duration: 0.9, stagger: 0.1 }, 0.25)
         .from('.ls-note', { autoAlpha: 0, duration: 0.5 }, 0.8)
         .from('.ls-pencil', { autoAlpha: 0, duration: 0.9 }, 0.6)
+        .from(q('.ls-widget'), { z: 240, autoAlpha: 0, duration: 0.9, stagger: 0.15 }, 0.5)
+        .to(filling, { value: HERO_WIDGETS.length, duration: 2.4, ease: 'none', onUpdate: () => setFill(filling.value) }, 1)
 
       document.fonts?.ready.then(() => ScrollTrigger.refresh())
 
@@ -291,10 +314,6 @@ export function Landing({ children, onSignIn }: LandingProps) {
                   <span className="ls-video-bar"><i /></span>
                   <small>Lecture 3 · 18:42</small>
                 </div>
-                <div className="ls-media ls-slide">
-                  <b>Slide 7 · Nutrient flow</b>
-                  <span className="ls-slide-chart"><i /><i /><i /><i /></span>
-                </div>
                 <div className="ls-sheet ls-sheet-3" />
                 <div className="ls-sheet ls-sheet-2" />
                 <article className="ls-doc">
@@ -309,7 +328,12 @@ export function Landing({ children, onSignIn }: LandingProps) {
                     <span className="ls-doc-page">p. 4</span>
                   </div>
                 </article>
-                <div className="ls-note"><span>?</span>How can one tree help another?</div>
+                {HERO_WIDGETS.map((widget, index) => (
+                  <div className="ls-widget" key={widget.id} style={{ left: widget.x, top: widget.y, rotate: `${widget.tilt}deg` }}>
+                    <WidgetCard data={widget.data} w={widget.w} h={widget.h} shown={Math.max(0, Math.min(1, fill - index))} seed={`hero-${widget.id}`} />
+                  </div>
+                ))}
+                <div className="ls-note"><Paper stock="sticky-yellow" seed="hero-question" size={[168, 150]} className="ls-note-paper"><span>?</span>How can one tree help another?</Paper></div>
                 <div className="ls-answer">
                   <span className="ls-answer-label"><i>Diagnostic</i><i>Planner</i><b>Tutor</b></span>
                   <p>Through the fungal network. Roots trade sugar and nitrogen across it, so a tall tree can feed a seedling in its shade.</p>

@@ -953,6 +953,16 @@ Future support:
 
 Imported material should be processed into structured, searchable information.
 
+### Document Roles
+
+Classify each imported document as either **content** (material that teaches a topic) or **process** (guidance for how work in the project should be done or explained). Assign the role automatically from extracted text during import, save it with the source, and let learners correct it from its card. If classification is unavailable or fails, keep the import usable as content. Existing sources without a saved role are treated as content.
+
+Show content and process sources with distinct card treatments and explicit role labels. These cards organize sources; they do not replace the whiteboard as the primary teaching surface.
+
+When teaching content in a project, automatically provide that project's process documents as separate, project-scoped guidance context. Process documents guide the explanation but are not lesson evidence, content summaries, comparison inputs, or citations. Preserve citations to the content documents and distinguish their claims from background. Process guidance may shape relevant teaching approach, but cannot override system rules, source-grounding requirements, safety constraints, or the learner's current request.
+
+Changing a source's role persists for later lessons and project analysis. A process source is not included as content evidence unless the learner changes its role to content.
+
 Where possible, preserve:
 
 - Filename

@@ -47,9 +47,9 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) { throw 'WebRTC voice dependency installation failed.' }
 $asrPython | Set-Content -Encoding ascii (Join-Path $runtime 'asr-python.path')
 if (-not $SkipModelWarmup) {
-  & $asrPython -c "from faster_whisper import WhisperModel; WhisperModel('base.en', device='cpu', compute_type='int8')"
-  if ($LASTEXITCODE -ne 0) { throw 'Could not download/load the faster-whisper base.en model.' }
+  & $asrPython -c "import onnx_asr; onnx_asr.load_model('nemo-parakeet-tdt-0.6b-v2', quantization='int8', providers=['CPUExecutionProvider'])"
+  if ($LASTEXITCODE -ne 0) { throw 'Could not download/load the Parakeet TDT 0.6B speech-to-text model.' }
 }
 $version = & $audioExe --version | Select-Object -First 1
 if ($version -notmatch 'audio.cpp 0\.9\.4') { throw "Expected audio.cpp 0.9.4, found: $version" }
-Write-Host "Voice dependencies ready ($version, faster-whisper base.en CPU int8, aiortc)."
+Write-Host "Voice dependencies ready ($version, Parakeet TDT 0.6B v2 int8 CPU, aiortc)."

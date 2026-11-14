@@ -4,7 +4,7 @@ Product direction and requirements: [AI Learning Canvas specification](product-s
 
 Production builds copy the Silero model, audio worklet, and ONNX Runtime WebAssembly files into `dist/voice-assets`. Publish the Vite `dist` directory and route `/api` to the app server. The app server handles GPT-6 Responses and tool orchestration; a separate persistent voice host runs WebRTC signaling, faster-whisper, and Qwen. Microphone media goes directly from the browser to that host over a WebRTC audio track, and Qwen PCM returns over its DataChannel.
 
-The voice path uses browser Silero VAD (`@ricky0123/vad-web`), local faster-whisper `base.en` on CPU/int8, streamed OpenAI Responses API calls (`gpt-6-luna`, medium reasoning), and Qwen3-TTS CustomVoice Q8_0/Aiden served by audio.cpp v0.9.4/CUDA. The Node server keeps the OpenAI API key. VAD interrupts playback and cancels local Qwen generation; the voice host returns a transcript, which the app server sends to Responses. Qwen starts as soon as the first speakable phrase arrives.
+The voice path uses browser Silero VAD (`@ricky0123/vad-web`), local NVIDIA Parakeet TDT 0.6B v2 speech-to-text (int8 ONNX on CPU via `onnx-asr`; set `LOCAL_STT_PROVIDER=faster_whisper` to use Whisper `base.en` instead), streamed OpenAI Responses API calls (`gpt-6-luna`, medium reasoning), and Qwen3-TTS CustomVoice Q8_0/Aiden served by audio.cpp v0.9.4/CUDA. The Node server keeps the OpenAI API key. VAD interrupts playback and cancels local Qwen generation; the voice host returns a transcript, which the app server sends to Responses. Qwen starts as soon as the first speakable phrase arrives.
 
 ## Install and run on Windows
 
@@ -32,8 +32,8 @@ The defaults are in `.env.example`. Main switches:
 
 ```dotenv
 OPENAI_TEXT_MODEL=gpt-6-luna
-LOCAL_STT_PROVIDER=faster_whisper
-LOCAL_STT_MODEL=base.en
+LOCAL_STT_PROVIDER=parakeet
+LOCAL_STT_MODEL=nemo-parakeet-tdt-0.6b-v2
 LOCAL_VAD_PROVIDER=silero
 LOCAL_TTS_PROVIDER=audiocpp
 LOCAL_TTS_URL=http://127.0.0.1:8187

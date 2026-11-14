@@ -22,8 +22,8 @@ OPENAI_API_KEY=your_project_key_here
 EXA_API_KEY=your_exa_key_here
 OPENAI_MODEL=gpt-6-luna
 OPENAI_TEXT_MODEL=gpt-6-luna
-LOCAL_STT_PROVIDER=faster_whisper
-LOCAL_STT_MODEL=base.en
+LOCAL_STT_PROVIDER=parakeet
+LOCAL_STT_MODEL=nemo-parakeet-tdt-0.6b-v2
 LOCAL_VAD_PROVIDER=silero
 LOCAL_TTS_PROVIDER=audiocpp
 LOCAL_TTS_MODEL=qwen3-custom
@@ -57,7 +57,7 @@ Sources saved in the browser before accounts existed move into the first empty a
 
 Teaching plans, answer review, practice, and diagrams use the OpenAI Responses API with structured output. The planning DeepAgent may search reputable academic, educational, and official sources for missing background; background claims remain separate from the supplied material. A plan action sends extracted text for the selected material, and answer review sends the learner's submitted answer with relevant source evidence. Local import and library storage remain on this device.
 
-Voice uses hold-to-talk with browser Silero VAD and WebRTC to the local faster-whisper/Qwen host, with streamed OpenAI Responses calls for the tutor. The microphone is captured only while the learner holds the talk control. Raw audio goes to the local RTC host rather than OpenAI or the hosted app; transcript text is sent to OpenAI. Text questions remain available when voice is stopped or unavailable. Public RTC hosting needs authentication, rate limits, and suitable ICE/TURN connectivity. This repo does not provision them. See [Hybrid voice setup and benchmark results](docs/hybrid-voice.md).
+Voice uses hold-to-talk with browser Silero VAD and WebRTC to the local Parakeet speech-to-text/Qwen host, with streamed OpenAI Responses calls for the tutor. The microphone is captured only while the learner holds the talk control. Raw audio goes to the local RTC host rather than OpenAI or the hosted app; transcript text is sent to OpenAI. Text questions remain available when voice is stopped or unavailable. Public RTC hosting needs authentication, rate limits, and suitable ICE/TURN connectivity. This repo does not provision them. See [Hybrid voice setup and benchmark results](docs/hybrid-voice.md).
 
 The local learner profile works across imported sources in this browser. It does not sync between devices. A deployed app still needs an API-function adapter, authentication, rate limits, storage changes, and a separately hosted voice service. Older PDFs imported before page-grounded teaching was added may need re-importing to retain their original bytes.
 The [tldraw Agent Starter Kit](https://tldraw.dev/starter-kits/agent) and [editor API](https://tldraw.dev/docs/editor) describe the canvas architecture used here.
