@@ -8,7 +8,7 @@ export type Relation = (typeof RELATIONS)[number] | ''
 
 declare module 'tldraw' {
   interface TLGlobalShapePropsMap {
-    'source-card': { w: number; h: number; sourceId: string; title: string; kind: string; segments: number; imported: string }
+    'source-card': { w: number; h: number; sourceId: string; title: string; kind: string; segments: number; imported: string; summary: string }
     'red-string': { fromId: string; toId: string; relation: Relation }
   }
 }
@@ -17,28 +17,28 @@ export type SourceCardShape = TLShape<'source-card'>
 export type RedStringShape = TLShape<'red-string'>
 
 export const CARD_W = 300
-export const CARD_H = 180
+export const CARD_H = 210
 
 export class SourceCardUtil extends ShapeUtil<SourceCardShape> {
   static override type = 'source-card' as const
-  static override props = { w: T.number, h: T.number, sourceId: T.string, title: T.string, kind: T.string, segments: T.number, imported: T.string }
+  static override props = { w: T.number, h: T.number, sourceId: T.string, title: T.string, kind: T.string, segments: T.number, imported: T.string, summary: T.string }
   override canResize = () => false
   override canEdit = () => false
   override hideRotateHandle = () => true
   getDefaultProps(): SourceCardShape['props'] {
-    return { w: CARD_W, h: CARD_H, sourceId: '', title: 'Untitled source', kind: 'pdf', segments: 0, imported: '' }
+    return { w: CARD_W, h: CARD_H, sourceId: '', title: 'Untitled source', kind: 'pdf', segments: 0, imported: '', summary: '' }
   }
   getGeometry(shape: SourceCardShape) {
     return new Rectangle2d({ width: shape.props.w, height: shape.props.h, isFilled: true })
   }
   component(shape: SourceCardShape) {
-    const { w, h, title, kind, segments, imported, sourceId } = shape.props
+    const { w, h, title, kind, segments, sourceId, summary } = shape.props
     return (
       <HTMLContainer className="board-card" style={{ width: w, height: h }}>
         <IndexCard seed={sourceId} size={[w, h]} className="h-full min-h-0 max-w-none select-none">
           <IndexCardHeader><IndexCardTitle title={title}>{title}</IndexCardTitle></IndexCardHeader>
-          <IndexCardContent className="board-card-meta">{kind.toUpperCase()} source, {segments} {segments === 1 ? 'section' : 'sections'}</IndexCardContent>
-          <IndexCardFooter><span>{imported}</span><span>Double-click to study</span></IndexCardFooter>
+          <IndexCardContent className="board-card-summary">{summary || 'Reading this source…'}</IndexCardContent>
+          <IndexCardFooter><span>{kind.toUpperCase()} · {segments} {segments === 1 ? 'section' : 'sections'}</span><span>Double-click to learn</span></IndexCardFooter>
         </IndexCard>
       </HTMLContainer>
     )
