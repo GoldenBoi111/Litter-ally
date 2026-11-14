@@ -1,0 +1,110 @@
+@import url('https://kevintngo.github.io/looseleaf/fonts/kevin-sans.css');
+
+:root {
+  --font-hand: 'Kevin Sans Hand', 'Kevin Sans', cursive;
+  --font-script: 'Kevin Sans Script', 'Kevin Sans', cursive;
+  --font-type: 'Kevin Sans Type', 'Kevin Sans', cursive;
+  --font-family-body: var(--font-hand);
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --desk-parchment: #a8c8bb;
+  --desk-card: #fbf6e9;
+  --desk-card-warm: #f7e38a;
+  --desk-stroke: #2a2420;
+  --desk-indigo: #2c4f9e;
+  --desk-highlight: #f8dc4c;
+  --ll-desk: #a8c8bb;
+  --ll-desk-deep: #93b4a7;
+  --ll-paper: #f8f5ee;
+  --ll-paper-shade: #ece6da;
+  --ll-slip: #fbf8f1;
+  --ll-card: #fbf6e9;
+  --ll-ink: #2a2420;
+  --ll-ink-soft: #4a423b;
+  --ll-ink-muted: #4a433c;
+  --ll-ink-you: #2c4f9e;
+
+  --ink: #2a2420;
+  --muted: #6b6660;
+  --line: #d4ded7;
+  --paper: #f8f5ee;
+  --olive: #3b7a4b;
+  --orange: #df6b3c;
+  --serif: var(--font-script);
+  --mono: var(--font-mono);
+}
+
+body,
+.app-shell,
+.workspace,
+.canvas-column,
+.canvas-area,
+.page,
+.topbar,
+.left-rail,
+.conversation,
+.canvas-toolbar,
+.focus-strip {
+  color: var(--ll-ink);
+}
+
+body,
+.app-shell,
+.workspace,
+.canvas-column,
+.canvas-area,
+.page {
+  background-color: var(--ll-desk);
+}
+
+.topbar,
+.left-rail,
+.conversation,
+.canvas-toolbar,
+.focus-strip,
+.desk-card,
+.lesson-dock,
+.composer,
+.source-popover,
+.canvas-empty-state {
+  background-color: var(--ll-paper);
+  border-color: var(--ll-paper-shade);
+}
+
+.document-cover,
+.card-grid .desk-card:nth-child(3n+2),
+.lesson.active,
+.paper-list-item.selected,
+.conversation-context,
+.you .message-content p {
+  background-color: var(--ll-card);
+}
+
+.page,
+.page-head p,
+.desk-card .muted,
+.desk-card .meta,
+.message-content p,
+.paper-list-copy small {
+  color: var(--ll-ink-soft);
+}
+
+button:not(.tl-container button):not([class*='tlui']),
+input,
+textarea,
+select {
+  color: var(--ll-ink);
+}
+
+.app-shell .tl-container.tl-theme__light {
+  --tl-font-draw: var(--font-hand);
+  --tl-font-sans: var(--font-hand);
+  --tl-font-serif: var(--font-script);
+  --tl-font-mono: var(--font-mono);
+}
+
+.canvas-area .tl-background {
+  background-color: var(--ll-desk) !important;
+}
+.canvas-area .tlui-layout {
+  --tl-color-background: var(--ll-desk);
+}
