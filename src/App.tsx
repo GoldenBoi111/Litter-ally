@@ -232,6 +232,13 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     const [first, ...rest] = contentSources.map(p => p.id)
     enterLesson(first, rest, DEEP_GOAL(activeProject.name))
   }
+  const changeDocumentRole = (sourceId: string, documentRole: 'content' | 'process') => {
+    const paper = papers.find(item => item.id === sourceId)
+    if (!paper || (paper.documentRole || 'content') === documentRole) return
+    const updated = { ...paper, documentRole }
+    setPapers(items => items.map(item => item.id === sourceId ? updated : item))
+    savePaper(updated).catch(() => setStatus('The document role changed, but it could not be saved.'))
+  }
   const projectSummaries = useMemo(() => Object.fromEntries(Object.entries(activeProject?.summaries || {}).map(([id, s]) => [id, s.summary || s.tidbit])), [activeProject])
   const contentProject = activeProject ? { ...activeProject, sourceIds: contentSources.map(paper => paper.id), summaries: Object.fromEntries(contentSources.flatMap(paper => activeProject.summaries[paper.id] ? [[paper.id, activeProject.summaries[paper.id]]] : [])) } : null
   const projectSynthesisCurrent = !!contentProject && contentProject.synthesisFor === projectSynthesisKey(contentProject)
@@ -1157,7 +1164,8 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
             onHideConnection={pair => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: [...new Set([...(project.hiddenConnectionPairs || []), pair])] } : project))}
             onRestoreConnection={pair => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: (project.hiddenConnectionPairs || []).filter(item => item !== pair) } : project))}
             onRestoreHiddenConnections={() => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: [] } : project))}
-            onOpen={openLesson} onCompare={openCompare} onAdd={openAdd}
+            onOpen={openLesson} onCompare={openCompare} onAdd={openAdd} onDeep={openDeep}
+            onChangeRole={changeDocumentRole}
           />)
           : view !== 'lesson' ? <ProjectsPage projects={projects} papers={papers} loading={!projectsLoaded || !libraryReady} onOpen={id => navigate('board', id)} onCreate={(name, description) => { const p = newProject(name, description); updateProjects(list => [p, ...list]); navigate('board', p.id) }} onDelete={project => { if (confirm(`Delete the project "${project.name}"? Its sources stay in your library.`)) updateProjects(list => list.filter(p => p.id !== project.id)) }} /> : <>
           <div className={`canvas-area ${dragging ? 'canvas-dragging' : ''}`} onDragEnter={event => { event.preventDefault(); setDragging(true) }} onDragOver={event => event.preventDefault()} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false) }} onDrop={onCanvasDrop}>
