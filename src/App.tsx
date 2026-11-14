@@ -13,8 +13,12 @@ import { assessAnswer, extractTaughtKnowledge, requestAdaptivePlan, requestAdapt
 import { finishPdfExtraction, type PdfExtraction } from './pdfImport'
 import { importImageSource, importMediaSource, importTextSource } from './sourceImport'
 import { placeSourceImage } from './sourceImage'
-import { TutorPanel } from './TutorPanel'
+import { LessonDock } from './LessonDock'
 import { Board } from './board/Board'
+import { ProjectsPage } from './pages/ProjectsPage'
+import { ProjectOverview } from './pages/ProjectOverview'
+import './pages/pages.css'
+import { COMPARE_GOAL, DEEP_GOAL, loadProjects, markSourcesReviewed, newProject, projectBoardKey, projectSynthesisKey, saveProjects, summarizeSource, synthesizeProject, type Project } from './projects'
 import { PersistentTldraw } from './persistentCanvas'
 import { Wordmark } from './Logo'
 import type { User } from './AuthGate'
@@ -139,9 +143,60 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([])
   const [libraryReady, setLibraryReady] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
-  const [boardOpen, setBoardOpen] = useState(true)
+  type View = 'projects' | 'overview' | 'board' | 'lesson'
+  const [view, setView] = useState<View>('projects')
+  const boardOpen = view !== 'lesson'
+  const [projects, setProjects] = useState<Project[]>([])
+  const projectsRef = useRef(projects)
+  projectsRef.current = projects
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
+  const activeProject = projects.find(p => p.id === activeProjectId) || null
+  const [lessonMode, setLessonMode] = useState<{ kind: 'source' | 'compare' | 'deep'; label: string }>({ kind: 'source', label: '' })
+  const [pendingSummaries, setPendingSummaries] = useState<Set<string>>(new Set())
+  const lessonEntryRef = useRef<{ primary: string; extra: string[]; goal: string } | null>(null)
+  const [pendingGoal, setPendingGoal] = useState<{ goal: string; extra: string[] } | null>(null)
   const openAdd = useCallback(() => { setError(''); setAddOpen(true) }, [])
-  const openLesson = useCallback((sourceId: string) => { setCurrentId(sourceId); setBoardOpen(false) }, [])
+  const updateProjects = useCallback((update: (list: Project[]) => Project[]) => {
+    const next = update(projectsRef.current)
+    projectsRef.current = next
+    setProjects(next)
+    saveProjects(next).catch(reason => setError(errorMessage(reason)))
+  }, [])
+  const activeProjectIdRef = useRef(activeProjectId)
+  activeProjectIdRef.current = activeProjectId
+  const [returnView, setReturnView] = useState<View>('overview')
+  const [projectsLoaded, setProjectsLoaded] = useState(false)
+  const startGuidedLesson = (extra: string[], goal: string) => {
+    setSelectedSourceIds(extra)
+    planRef.current = null
+    setPlan(null)
+    setDiagnostic(null)
+    checkpointIndexRef.current = 0
+    setCheckpointIndex(0)
+    tutorRef.current?.close()
+    tutorRef.current = null
+    setTranscript([])
+    setTutorStatus('idle')
+    setPendingGoal({ goal, extra })
+  }
+  const enterLesson = (primary: string, extra: string[], goal: string | null, mode: { kind: 'source' | 'compare' | 'deep'; label: string }) => {
+    setReturnView(view === 'lesson' ? returnView : view)
+    setLessonMode(mode)
+    setView('lesson')
+    if (!goal) { setCurrentId(primary); return }
+    if (primary === currentId) startGuidedLesson(extra, goal)
+    else { lessonEntryRef.current = { primary, extra, goal }; setCurrentId(primary) }
+  }
+  const titleOf = (id: string) => papers.find(p => p.id === id)?.title || 'Source'
+  const openLesson = (sourceId: string) => enterLesson(sourceId, [], null, { kind: 'source', label: '' })
+  const openCompare = (a: string, b: string) => enterLesson(a, [b], COMPARE_GOAL(titleOf(a), titleOf(b)), { kind: 'compare', label: 'Connection' })
+  const projectSources = activeProject ? activeProject.sourceIds.map(id => papers.find(p => p.id === id)).filter((p): p is ImportedPaper => Boolean(p)) : []
+  const projectSummaries = useMemo(() => Object.fromEntries(Object.entries(activeProject?.summaries || {}).map(([id, s]) => [id, s.summary || s.tidbit])), [activeProject])
+  const openDeep = () => {
+    if (!activeProject || !projectSources.length) return
+    const [first, ...rest] = projectSources.map(p => p.id)
+    enterLesson(first, rest, DEEP_GOAL(activeProject.name), { kind: 'deep', label: 'Deep dive' })
+  }
   const [stylePanelOpen, setStylePanelOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
@@ -278,6 +333,9 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     setTutorStatus('idle')
     setTutorMicMuted(true)
     setTutorDetail(missingLessonSource ? 'A source used by this saved lesson was removed. Rebuild the plan to continue.' : saved && !restored ? 'This lesson predates page-grounded teaching. Rebuild it to continue.' : '')
+    const entry = lessonEntryRef.current
+    if (entry && entry.primary === currentId) { lessonEntryRef.current = null; startGuidedLesson(entry.extra, entry.goal) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentId])
 
   const persistLessonState = useCallback(async (nextPlan: TeachingPlan, nextCheckpoint: number, resetAssessments = false, targetPaper = currentPaper) => {
@@ -325,10 +383,12 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     const paper: ImportedPaper = { ...result, id: crypto.randomUUID(), importedAt: new Date().toISOString() }
     await savePaper(paper)
     setPapers(existing => [paper, ...existing])
+    const projectId = activeProjectIdRef.current
+    if (projectId) updateProjects(list => list.map(p => p.id === projectId ? { ...p, sourceIds: [...p.sourceIds, paper.id] } : p))
     setCurrentId(paper.id)
     setStatus(paper.sourceKind === 'topic' ? `Started a lesson on "${paper.title}"` : `Imported "${paper.title}" - ${paper.pageCount} segments`)
     setError('')
-  }, [])
+  }, [updateProjects])
 
   const createTopicLesson = useCallback(async (value: string) => {
     const topic = value.trim()
@@ -807,6 +867,57 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     }
   }, [currentPaper, currentId, knowledgeGraph, learnerKnowledge, learnerEvidence, storeTeachingPlan])
 
+  // Compare and deep-dive lessons start planning on their own once the combined sources are in place.
+  useEffect(() => {
+    if (!pendingGoal || view !== 'lesson' || planBusy || !currentPaper) return
+    if (selectedSourceIds.join('|') !== pendingGoal.extra.join('|')) return
+    const goal = pendingGoal.goal
+    setPendingGoal(null)
+    void generateTeachingPlan(goal)
+  }, [pendingGoal, selectedSourceIds, view, planBusy, currentPaper, generateTeachingPlan])
+
+  useEffect(() => {
+    loadProjects().then(list => { projectsRef.current = list; setProjects(list); setProjectsLoaded(true) }).catch(reason => { setError(errorMessage(reason)); setProjectsLoaded(true) })
+  }, [])
+  // First run with an existing library: gather it into a starter project so nothing looks lost.
+  useEffect(() => {
+    if (!projectsLoaded || !libraryReady || projectsRef.current.length || !papers.length) return
+    updateProjects(() => [newProject('My library', 'Everything you imported before projects existed.', papers.map(p => p.id))])
+  }, [projectsLoaded, libraryReady, papers, updateProjects])
+
+  const summaryRequested = useRef(new Set<string>())
+  useEffect(() => {
+    if (!activeProject || (view !== 'overview' && view !== 'board')) return
+    const projectId = activeProject.id
+    for (const paper of projectSources) {
+      if (activeProject.summaries[paper.id] || summaryRequested.current.has(paper.id)) continue
+      summaryRequested.current.add(paper.id)
+      setPendingSummaries(prev => new Set(prev).add(paper.id))
+      summarizeSource(paper)
+        .then(summary => updateProjects(list => list.map(p => p.id === projectId ? { ...p, summaries: { ...p.summaries, [paper.id]: summary } } : p)))
+        .catch(reason => { summaryRequested.current.delete(paper.id); setStatus(errorMessage(reason)) })
+        .finally(() => setPendingSummaries(prev => { const next = new Set(prev); next.delete(paper.id); return next }))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject, view, papers])
+
+  const synthesisRequested = useRef(new Set<string>())
+  useEffect(() => {
+    if (!activeProject || (view !== 'overview' && view !== 'board') || activeProject.sourceIds.length < 2 || !activeProject.sourceIds.every(id => activeProject.summaries[id])) return
+    const key = projectSynthesisKey(activeProject)
+    if (activeProject.synthesisFor === key || synthesisRequested.current.has(key)) return
+    synthesisRequested.current.add(key)
+    synthesizeProject(activeProject, projectSources)
+      .then(synthesis => updateProjects(list => list.map(project => project.id === activeProject.id && projectSynthesisKey(project) === key ? { ...project, synthesis, synthesisFor: key } : project)))
+      .catch(reason => { synthesisRequested.current.delete(key); setStatus(errorMessage(reason)) })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject, view, papers])
+
+  useEffect(() => {
+    if (diagnostic && !planBusy) void completeTeachingPlanRef.current?.(diagnostic.questions.map(() => ''))
+  }, [diagnostic, planBusy])
+  const completeTeachingPlanRef = useRef<((answers: string[]) => Promise<void>) | null>(null)
+
   const completeTeachingPlan = useCallback(async (answers: string[]) => {
     if (!currentPaper || !diagnostic) return
     const paper = currentPaper
@@ -833,6 +944,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
       setPlanBusy(false)
     }
   }, [currentPaper, currentId, diagnostic, knowledgeGraph, learnerKnowledge, learnerEvidence, storeTeachingPlan])
+  completeTeachingPlanRef.current = completeTeachingPlan
   const adaptTeachingPlan = useCallback(async (review: AnswerReview) => {
     const currentPlan = planRef.current
     if (!currentPaper || !currentPlan) return
@@ -948,9 +1060,15 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
         setStatus('Your answer was saved, but the proposition graph could not be updated from this lesson yet.')
       }
     }
+    if (review.status === 'clear' && checkpointIndex === (planRef.current?.sessions.length || 0) - 1) {
+      const projectId = activeProjectIdRef.current
+      const completedIds = lessonMode.kind === 'deep' ? projectsRef.current.find(project => project.id === projectId)?.sourceIds || []
+        : lessonMode.kind === 'source' ? [currentPaper.id] : []
+      if (projectId && completedIds.length) updateProjects(list => list.map(project => project.id === projectId ? markSourcesReviewed(project, completedIds) : project))
+    }
     if (review.status !== 'clear') await adaptTeachingPlan(review)
     return review
-  }), [currentPaper, currentId, persistLearningReview, runLearningOperation, adaptTeachingPlan])
+  }), [currentPaper, currentId, persistLearningReview, runLearningOperation, adaptTeachingPlan, lessonMode, updateProjects])
 
   const startPractice = useCallback((checkpoint: { title: string; goal: string; concepts: string[]; sourcePages: number[] }) => runLearningOperation(async () => {
     if (!currentPaper) throw new Error('No source is selected.')
@@ -995,15 +1113,22 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     }
   }, [refreshKnowledgeGraph])
 
+  // Kept for the quiz/selection features the old tutor panel exposed; not surfaced in the decluttered lesson view.
+  void [hasSelection, askAboutSelection, assessCheckpoint, startPractice, assessPracticeAnswer]
+
   return (
     <main className="app-shell">
       <header className="topbar">
         <nav className="crumbs" aria-label="Location">
-          <button className="brand" onClick={() => setBoardOpen(true)} aria-current={boardOpen ? 'page' : undefined}><Wordmark size={26} /></button>
-          {!boardOpen && currentPaper && <><span className="crumb-sep" aria-hidden="true">/</span><span className="crumb-current" aria-current="page">{currentPaper.title}</span></>}
+          <button className="brand" onClick={() => setView('projects')} aria-current={view === 'projects' ? 'page' : undefined}><Wordmark size={26} /></button>
+          {view !== 'projects' && activeProject && <><span className="crumb-sep" aria-hidden="true">/</span><button className="crumb-link" onClick={() => setView('overview')} aria-current={view === 'overview' ? 'page' : undefined}>{activeProject.name}</button></>}
+          {view === 'board' && <><span className="crumb-sep" aria-hidden="true">/</span><span className="crumb-current" aria-current="page">Board</span></>}
+          {view === 'lesson' && currentPaper && <><span className="crumb-sep" aria-hidden="true">/</span><span className="crumb-current" aria-current="page">{currentPaper.title}</span></>}
         </nav>
         <div className="top-actions">
-          {!boardOpen && <Button size="sm" variant="ghost" onClick={() => setBoardOpen(true)}>Back to board</Button>}
+          {view === 'lesson' && <Button size="sm" variant="ghost" onClick={() => setView(activeProject ? returnView : 'projects')}>{returnView === 'board' ? 'Back to board' : 'Back to project'}</Button>}
+          {view === 'overview' && <Button size="sm" variant="ghost" onClick={() => setView('board')}>Board</Button>}
+          {view === 'board' && <Button size="sm" variant="ghost" onClick={() => setView('overview')}>Overview</Button>}
           <Button size="sm" onClick={openAdd}>Add material</Button>
           <span className="account" title={user.email}>{user.name}</span>
           <Button size="sm" variant="ghost" onClick={onSignOut}>Sign out</Button>
@@ -1014,19 +1139,36 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
       </header>
 
       <div className="workspace">
-        <aside className="left-rail library-rail">
+        {view === 'lesson' && <aside className="left-rail library-rail">
           <div className="library-heading"><h2>Sources</h2><span>{papers.length || 'None yet'}</span></div>
           <div className="rail-divider" />
-          {papers.length ? <div className="paper-list">{papers.map((paper, index) => <HStack key={paper.id} gap={1} vAlign="center" style={{ animationDelay: `${index * 30}ms` }} className={`paper-list-item ${!boardOpen && paper.id === currentId ? 'selected' : ''}`}><button className="paper-list-select" onClick={() => openLesson(paper.id)}><span className="pdf-badge">{(paper.sourceKind || 'pdf').toUpperCase()}</span><span className="paper-list-copy"><b>{paper.title}</b><small>{paper.pageCount} segments - {new Date(paper.importedAt).toLocaleDateString()}</small></span></button><Button className="paper-remove" aria-label={`Remove ${paper.title}`} title="Remove source" variant="ghost" size="icon-xs" disabled={deletingPaperId === paper.id} onClick={() => void removePaper(paper)}>x</Button></HStack>)}</div> : null}
+          {(activeProject ? projectSources : papers).length ? <div className="paper-list">{(activeProject ? projectSources : papers).map((paper, index) => <HStack key={paper.id} gap={1} vAlign="center" style={{ animationDelay: `${index * 30}ms` }} className={`paper-list-item ${!boardOpen && paper.id === currentId ? 'selected' : ''}`}><button className="paper-list-select" onClick={() => openLesson(paper.id)}><span className="pdf-badge">{(paper.sourceKind || 'pdf').toUpperCase()}</span><span className="paper-list-copy"><b>{paper.title}</b><small>{paper.pageCount} segments - {new Date(paper.importedAt).toLocaleDateString()}</small></span></button><Button className="paper-remove" aria-label={`Remove ${paper.title}`} title="Remove source" variant="ghost" size="icon-xs" disabled={deletingPaperId === paper.id} onClick={() => void removePaper(paper)}>x</Button></HStack>)}</div> : null}
 
           {!boardOpen && currentPaper && papers.length > 1 && <section className="lesson-source-picker"><p className="section-eyebrow">Sources for next lesson</p><HStack gap={1} wrap="wrap">{papers.filter(paper => paper.id !== currentId).map(paper => <Button key={paper.id} size="sm" disabled={planBusy || learningBusy} variant={selectedSourceIds.includes(paper.id) ? "default" : "outline"} aria-pressed={selectedSourceIds.includes(paper.id)} onClick={() => toggleLearningSource(paper.id)}>{selectedSourceIds.includes(paper.id) ? "Included: " : "Include: "}{paper.title}</Button>)}</HStack></section>}
-        </aside>
+        </aside>}
 
         <section className="canvas-column">
-          {boardOpen ? (libraryReady && <Board papers={papers} onOpen={openLesson} onAdd={openAdd} />) : <>
+          {view === 'projects' ? <ProjectsPage
+            projects={projects}
+            onOpen={id => { setActiveProjectId(id); setView('overview') }}
+            onCreate={(name, description) => { const p = newProject(name, description); updateProjects(list => [p, ...list]); setActiveProjectId(p.id); setView('overview') }}
+            onDelete={project => { if (confirm(`Delete the project "${project.name}"? Its sources stay in your library.`)) updateProjects(list => list.filter(p => p.id !== project.id)) }}
+          /> : view === 'overview' && activeProject ? <ProjectOverview
+            project={activeProject}
+            sources={projectSources}
+            library={papers}
+            pendingSummaries={pendingSummaries}
+            onLearn={openLesson}
+            onBoard={() => setView('board')}
+            onDeep={openDeep}
+            onAdd={openAdd}
+            onAttach={id => updateProjects(list => list.map(p => p.id === activeProject.id ? { ...p, sourceIds: [...p.sourceIds, id] } : p))}
+            onDetach={id => updateProjects(list => list.map(p => p.id === activeProject.id ? { ...p, sourceIds: p.sourceIds.filter(s => s !== id) } : p))}
+          /> : view === 'board' && activeProject ? (libraryReady && <Board key={activeProject.id} canvasKey={projectBoardKey(activeProject.id)} papers={projectSources} summaries={projectSummaries} onOpen={openLesson} onCompare={openCompare} onAdd={openAdd} />)
+          : view !== 'lesson' ? <ProjectsPage projects={projects} onOpen={id => { setActiveProjectId(id); setView('overview') }} onCreate={(name, description) => { const p = newProject(name, description); updateProjects(list => [p, ...list]); setActiveProjectId(p.id); setView('overview') }} onDelete={() => {}} /> : <>
           {currentPaper && (
             <div className="canvas-toolbar">
-              <div className="canvas-title"><span className="canvas-dot" /><span>{currentPaper.title}</span><span className="canvas-count">? {currentPaper.pageCount} segments</span></div>
+              <div className="canvas-title"><span className="canvas-dot" /><span>{currentPaper.title}</span>{lessonMode.label && <span className="lesson-mode">{lessonMode.label}</span>}<span className="canvas-count">? {currentPaper.pageCount} segments</span></div>
               <div className="canvas-tools">
                 <IconButton label="Fit canvas to view" tooltip="Fit canvas" size="sm" variant="secondary" icon="Fit" onClick={() => editorRef.current?.zoomToFit({ animation: { duration: 350 } })} />
                 <Button size="sm" disabled={planBusy || learningBusy} onClick={() => void generateTeachingPlan()}>{planBusy ? 'Building plan...' : plan ? 'Rebuild teaching plan' : 'Build teaching plan'}</Button>
@@ -1048,48 +1190,16 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
               <span>Tutor</span>
             </div>
             {dragging && <div className="canvas-drop-cover" aria-hidden="true"><span>Drop to import</span></div>}
+            {currentPaper && <LessonDock
+              plan={plan} planBusy={planBusy} checkpointIndex={checkpointIndex} status={tutorStatus} detail={tutorDetail || error}
+              micMuted={tutorMicMuted} transcript={transcript}
+              onBuild={() => void generateTeachingPlan()} onStart={() => void startTutor()} onPause={pauseTutor} onResume={resumeTutor} onStop={stopTutor}
+              onSelectCheckpoint={selectCheckpoint} onTalkStart={startTutorPushToTalk} onTalkEnd={endTutorPushToTalk}
+            />}
           </div>
           </>}
         </section>
 
-        {!boardOpen && currentPaper ? <TutorPanel
-          plan={plan}
-          diagnostic={diagnostic}
-          checkpointIndex={checkpointIndex}
-          status={tutorStatus}
-          micMuted={tutorMicMuted}
-          statusDetail={tutorDetail || error}
-          transcript={transcript}
-          hasSelection={hasSelection}
-          sourceTitle={currentPaper.title}
-          sourceKind={currentPaper.sourceKind}
-          sourceText={currentPaper.text}
-          sourceSegments={currentPaper.sourceSegments || []}
-          paperId={currentPaper.id}
-          knowledge={knowledgeGraph}
-          learningEvidence={learnerEvidence}
-          assessment={currentPaper.learningState?.assessments?.[String(checkpointIndex)]}
-          learningBusy={learningBusy || planBusy}
-          planBusy={planBusy}
-          onBuildPlan={goal => void generateTeachingPlan(goal)}
-          onCompleteDiagnostic={answers => void completeTeachingPlan(answers)}
-          onStart={() => void startTutor()}
-          onPause={pauseTutor}
-          onPushToTalkStart={startTutorPushToTalk}
-          onPushToTalkEnd={endTutorPushToTalk}
-          onResume={resumeTutor}
-          onStop={stopTutor}
-          onBack={() => selectCheckpoint(checkpointIndex - 1)}
-          onSkip={() => selectCheckpoint(checkpointIndex + 1)}
-          onSelectCheckpoint={selectCheckpoint}
-          onAsk={askTutor}
-          onAskSelection={askAboutSelection}
-          onRefreshKnowledgeGraph={refreshKnowledgeGraph}
-          onOpenPage={pageNumber => { void showSourcePage(pageNumber).then(result => setTutorDetail(result.message)).catch(reason => setTutorDetail(errorMessage(reason))) }}
-          onAssess={assessCheckpoint}
-          onStartPractice={startPractice}
-          onAssessPractice={assessPracticeAnswer}
-        /> : null}
       </div>
 
       <dialog ref={modalRef} className="ingest-dialog" onClose={() => setAddOpen(false)} onClick={event => { if (event.target === modalRef.current) setAddOpen(false) }}>

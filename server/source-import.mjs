@@ -99,12 +99,23 @@ function xlsxSegments(entries, fileName) {
   const sharedXml = entries.get('xl/sharedStrings.xml') || ''
   const shared = [...sharedXml.matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)].map(match => [...match[1].matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map(item => xmlText(item[1])).join(''))
   const workbook = entries.get('xl/workbook.xml') || ''
-  const names = [...workbook.matchAll(/<sheet\b[^>]*\bname="([^"]+)"/g)].map(match => xmlText(match[1]))
-  const sheets = [...entries.keys()].filter(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name)).sort((a, b) => Number(a.match(/sheet(\d+)/)[1]) - Number(b.match(/sheet(\d+)/)[1]))
+  const relationships = entries.get('xl/_rels/workbook.xml.rels') || ''
+  const targets = new Map([...relationships.matchAll(/<Relationship\b([^>]*)\/?\s*>/g)].flatMap(match => {
+    const id = match[1].match(/\bId="([^"]+)"/)?.[1]
+    const target = match[1].match(/\bTarget="([^"]+)"/)?.[1]
+    const path = target?.replace(/^\//, '')
+    return id && path ? [[id, path.startsWith('xl/') ? path : resolveZipTarget('xl', path)]] : []
+  }))
+  const sheets = [...workbook.matchAll(/<sheet\b([^>]*)\/?\s*>/g)].map((match, index) => {
+    const name = match[1].match(/\bname="([^"]+)"/)?.[1]
+    const relationId = match[1].match(/\br:id="([^"]+)"/)?.[1]
+    return { name: name ? xmlText(name) : `Sheet ${index + 1}`, path: targets.get(relationId) }
+  }).filter(sheet => sheet.path && entries.has(sheet.path))
+  if (!sheets.length) sheets.push(...[...entries.keys()].filter(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name)).sort((a, b) => Number(a.match(/sheet(\d+)/)[1]) - Number(b.match(/sheet(\d+)/)[1])).map((path, index) => ({ path, name: `Sheet ${index + 1}` })))
   if (!sheets.length) throw new Error('This workbook has no readable worksheets.')
   const segments = []
-  for (const [sheetIndex, name] of sheets.entries()) {
-    const xml = entries.get(name)
+  for (const { path, name: sheet } of sheets) {
+    const xml = entries.get(path)
     const rows = [...xml.matchAll(/<row\b[^>]*\br="(\d+)"[^>]*>([\s\S]*?)<\/row>/g)]
     for (let start = 0; start < rows.length; start += 80) {
       const selected = rows.slice(start, start + 80)
@@ -123,7 +134,6 @@ function xlsxSegments(entries, fileName) {
       const firstRow = Number(selected[0][1])
       const lastRow = Number(selected.at(-1)[1])
       const lastColumn = [...selected.at(-1)[2].matchAll(/<c\b[^>]*\br="([A-Z]+)\d+"/g)].at(-1)?.[1] || 'A'
-      const sheet = names[sheetIndex] || `Sheet ${sheetIndex + 1}`
       segments.push({ id: `${fileName}:${sheet}:${firstRow}-${lastRow}`, text: rendered.join('\n'), locator: { kind: 'spreadsheet-range', sheet, range: `A${firstRow}:${lastColumn}${lastRow}` } })
     }
   }
