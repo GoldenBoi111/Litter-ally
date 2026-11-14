@@ -74,6 +74,7 @@ export type ImportedPaper = {
   importedAt: string
   sourceKind?: LearningSource['kind']
   sourceSegments?: SourceSegment[]
+  documentRole?: 'content' | 'process'
   sourceData?: Blob
   sourceFrames?: Array<{ timeSeconds: number; data: Blob }>
 }
