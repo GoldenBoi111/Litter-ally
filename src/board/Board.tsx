@@ -148,14 +148,12 @@ function SelectionActions({ onChangeRole }: { onChangeRole: (id: string, role: '
   )
 }
 
-export function Board({ canvasKey, papers, summaries, synthesis, hiddenConnectionPairs, analysisStatus, analysisError, onRetry, onHideConnection, onRestoreConnection, onRestoreHiddenConnections, onOpen, onCompare, onAdd, onChangeRole, onDeep }: {
+export function Board({ canvasKey, papers, summaries, synthesis, hiddenConnectionPairs, analysisStatus, analysisError, onRetry, onHideConnection, onRestoreConnection, onRestoreHiddenConnections, onOpen, onCompare, onAdd, onChangeRole }: {
   canvasKey: string; papers: ImportedPaper[]; summaries: Record<string, string>; synthesis: ProjectSynthesis | null
   hiddenConnectionPairs: string[]; analysisStatus: string | null; analysisError: string | null
   onRetry: () => void; onHideConnection: (pair: string) => void; onRestoreConnection: (pair: string) => void; onRestoreHiddenConnections: () => void
   onOpen: (sourceId: string) => void; onCompare: (leftId: string, rightId: string) => void; onAdd: () => void
   onChangeRole: (sourceId: string, role: 'content' | 'process') => void
-  /** Learn the whole project end to end: every content source in order, guided by any process documents. */
-  onDeep: () => void
 }) {
   const [editor, setEditor] = useState<Editor | null>(null)
   const fitted = useRef(false)
@@ -221,12 +219,6 @@ export function Board({ canvasKey, papers, summaries, synthesis, hiddenConnectio
           if (import.meta.env.DEV) Object.assign(window, { boardEditor: ed }) // for local UI checks
         }}
       />
-      {papers.length > 0 && (() => {
-        const learnable = papers.filter(p => p.documentRole !== 'process').length
-        return <button className="board-deep" onClick={onDeep} disabled={!learnable} title={learnable ? `Walk through all ${learnable} content ${learnable === 1 ? 'source' : 'sources'} from start to finish` : 'Add a content source to learn this project'}>
-          Deep learn the whole project
-        </button>
-      })()}
       {papers.length > 0 && <button className="board-fit" onClick={() => editor?.zoomToFit({ animation: { duration: 320 } })}>Fit board</button>}
       {(analysisError || analysisStatus) && <div className="board-analysis" role="status">{analysisError ? <>{analysisError} <button onClick={onRetry}>Retry connections</button></> : analysisStatus}</div>}
       {synthesis && <details className="board-connections">
