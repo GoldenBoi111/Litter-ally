@@ -79,7 +79,7 @@ export type ImportedPaper = {
 }
 
 export function toLearningSource(record: ImportedPaper): LearningSource {
-  const segments: SourceSegment[] = record.sourceSegments || Array.from({ length: record.pageCount }, (_, index): SourceSegment | null => {
+  const segments: SourceSegment[] = record.sourceSegments?.length ? record.sourceSegments : Array.from({ length: record.pageCount }, (_, index): SourceSegment | null => {
     const page = index + 1
     const marker = new RegExp(`^\\[Page ${page}(?: of \\d+)?\\]\\s*$`, 'm')
     const start = record.text.search(marker)
@@ -321,14 +321,14 @@ export async function listPapers(): Promise<ImportedPaper[]> {
   const stored = await loadStoredPapers()
   await Promise.all(stored.map(loadBinary))
   return stored.map(withBinary).map(paper => {
-    if (paper.sourceKind && paper.sourceSegments) return paper
+    if (paper.sourceKind && paper.sourceSegments?.length) return paper
     const source = toLearningSource(paper)
     return { ...paper, sourceKind: source.kind, sourceSegments: source.segments }
   }).sort((a, b) => b.importedAt.localeCompare(a.importedAt))
 }
 
 export async function savePaper(paper: ImportedPaper): Promise<void> {
-  const source = paper.sourceKind && paper.sourceSegments ? paper : { ...paper, ...(() => {
+  const source = paper.sourceKind && paper.sourceSegments?.length ? paper : { ...paper, ...(() => {
     const normalized = toLearningSource(paper)
     return { sourceKind: normalized.kind, sourceSegments: normalized.segments }
   })() }
