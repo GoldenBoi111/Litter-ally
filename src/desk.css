@@ -1,12 +1,15 @@
 /* Analog desk theme: hand-drawn chrome, clean type for content. Loaded last so it overrides looseleaf/style tokens. */
-@import url('https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap');
 
 :root {
-  /* Type: handwritten for personality and chrome, Inter/JetBrains Mono for anything you read at length. */
-  --font-script: 'Kalam', 'Kevin Sans Script', cursive;
+  /* Use Loose Leaf's hand font for every text role, including canvas text. */
   --font-hand: 'Kalam', 'Kevin Sans Hand', cursive;
-  --font-family-body: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --font-script: var(--font-hand);
+  --font-type: var(--font-hand);
+  --font-family-body: var(--font-hand);
+  --font-mono: var(--font-hand);
+  --serif: var(--font-hand);
+  --mono: var(--font-hand);
 
   /* Surfaces */
   --desk-parchment: #f9f8f6;
@@ -37,6 +40,13 @@ body {
   font-family: var(--font-family-body);
   background: var(--desk-grain), var(--desk-parchment);
   color: var(--desk-stroke);
+}
+body * { font-family: var(--font-hand) !important; }
+.app-shell .tl-container.tl-theme__light {
+  --tl-font-draw: var(--font-hand);
+  --tl-font-sans: var(--font-hand);
+  --tl-font-serif: var(--font-hand);
+  --tl-font-mono: var(--font-hand);
 }
 code, pre, kbd, samp { font-family: var(--font-mono); }
 h1, h2, h3, .wordmark-text, .library-heading h2, .auth-brand h1 { font-family: var(--font-script); }
