@@ -12,7 +12,7 @@
     "app:local": "powershell -ExecutionPolicy Bypass -File scripts/run-paper-board.ps1",
     "voice:benchmark:local": "node --env-file-if-exists=.env scripts/benchmark-local-voice.mjs",
     "voice:benchmark": "node --env-file-if-exists=.env scripts/benchmark-voice.mjs",
-    "test": "node --experimental-test-module-mocks --test server/*.test.mjs src/board/*.test.mjs",
+    "test": "node --experimental-strip-types --experimental-test-module-mocks --test server/*.test.mjs src/board/*.test.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0"
   },
