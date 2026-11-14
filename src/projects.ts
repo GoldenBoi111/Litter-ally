@@ -1,6 +1,9 @@
 import { api, loadCanvas, saveCanvas, type ImportedPaper } from './storage'
 
-export type SourceSummary = { tidbit: string; summary: string; keyIdeas: string[] }
+export type SourceSummary = { tidbit: string; summary: string; keyIdeas: string[]; v?: number }
+/** Bump when the summary prompt changes so cached summaries regenerate (v2: state the content, not what the source is about). */
+export const SUMMARY_VERSION = 2
+export const isCurrentSummary = (s?: SourceSummary) => !!s && s.v === SUMMARY_VERSION
 export type ProjectConnection = { leftId: string; rightId: string; relation: 'supports' | 'contradicts' | 'extends'; reason: string }
 export type ProjectSynthesis = { synthesis: string; connections: ProjectConnection[] }
 export type Project = {
@@ -45,7 +48,8 @@ export function projectBoardKey(projectId: string) {
 }
 
 export async function summarizeSource(paper: ImportedPaper): Promise<SourceSummary> {
-  return api<SourceSummary>('/api/source/summary', { method: 'POST', json: { title: paper.title, text: paper.text.slice(0, 24_000) } })
+  const summary = await api<SourceSummary>('/api/source/summary', { method: 'POST', json: { title: paper.title, text: paper.text.slice(0, 24_000) } })
+  return { ...summary, v: SUMMARY_VERSION }
 }
 
 export async function synthesizeProject(project: Project, sources: ImportedPaper[]): Promise<ProjectSynthesis> {

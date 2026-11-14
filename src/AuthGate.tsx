@@ -34,22 +34,38 @@ function AuthScreen({ onSignedIn }: { onSignedIn: (user: User) => void }) {
   const registering = mode === 'register'
   return (
     <main className="auth-desk">
-      <IndexCard seed="auth" className="auth-card max-w-none">
-        <div className="auth-brand"><LogoMark size={40} /><h1>Litter-ally</h1></div>
-        <p className="auth-lede">{registering ? 'Create an account to keep your sources and boards on this computer.' : 'Sign in to open your board.'}</p>
-        <form onSubmit={submit} className="auth-form">
-          {registering && <label>Name<Input name="name" autoComplete="name" maxLength={80} /></label>}
-          <label>Email<Input name="email" type="email" autoComplete="email" required /></label>
-          <label>Password<Input name="password" type="password" autoComplete={registering ? 'new-password' : 'current-password'} minLength={registering ? 8 : undefined} required /></label>
-          {registering && <p className="auth-hint">At least 8 characters.</p>}
-          {error && <p className="auth-error" role="alert">{error}</p>}
-          <Button type="submit" disabled={busy}>{busy ? (registering ? 'Creating account…' : 'Signing in…') : registering ? 'Create account' : 'Sign in'}</Button>
-        </form>
-        <p className="auth-switch">
-          {registering ? 'Already have an account?' : 'New here?'}{' '}
-          <button type="button" onClick={() => { setMode(registering ? 'sign-in' : 'register'); setError('') }}>{registering ? 'Sign in' : 'Create an account'}</button>
-        </p>
-      </IndexCard>
+      <header className="landing-header"><a className="auth-brand" href="#home"><LogoMark size={36} /><h1>Litter-ally</h1></a><span>Read closely. Think clearly.</span></header>
+      <div className="landing-layout" id="home">
+        <section className="landing-story" aria-labelledby="landing-title">
+          <p className="landing-kicker">A reading desk for curious minds</p>
+          <h2 id="landing-title">Turn what you read<br />into what you know.</h2>
+          <p className="landing-copy">Bring your sources together, ask better questions, and build a clear picture of the ideas that matter.</p>
+          <div className="landing-steps" aria-label="How Litter-ally works">
+            <div><span>01</span><b>Gather</b><p>Start with a paper, link, file, or a question.</p></div>
+            <div><span>02</span><b>Explore</b><p>Learn with a tutor grounded in your sources.</p></div>
+            <div><span>03</span><b>Connect</b><p>Map ideas on a canvas you can keep building.</p></div>
+          </div>
+          <p className="landing-note">Your library and boards stay with your account.</p>
+        </section>
+        <IndexCard seed="auth" className="auth-card max-w-none">
+          <p className="landing-form-kicker">{registering ? 'Make a little room to learn' : 'Welcome back'}</p>
+          <h2 className="landing-form-title">{registering ? 'Create your account' : 'Sign in'}</h2>
+          <p className="auth-lede">{registering ? 'Save your sources and pick up where you left off.' : 'Your desk is ready when you are.'}</p>
+          <form onSubmit={submit} className="auth-form">
+            {registering && <label>Name<Input name="name" autoComplete="name" maxLength={80} /></label>}
+            <label>Email<Input name="email" type="email" autoComplete="email" required /></label>
+            <label>Password<Input name="password" type="password" autoComplete={registering ? 'new-password' : 'current-password'} minLength={registering ? 8 : undefined} required /></label>
+            {registering && <p className="auth-hint">At least 8 characters.</p>}
+            {error && <p className="auth-error" role="alert">{error}</p>}
+            <Button type="submit" disabled={busy}>{busy ? (registering ? 'Creating account…' : 'Signing in…') : registering ? 'Create account' : 'Sign in'}</Button>
+          </form>
+          <p className="auth-switch">
+            {registering ? 'Already have an account?' : 'New here?'}{' '}
+            <button type="button" onClick={() => { setMode(registering ? 'sign-in' : 'register'); setError('') }}>{registering ? 'Sign in' : 'Create an account'}</button>
+          </p>
+        </IndexCard>
+      </div>
+      <footer className="landing-footer">A calmer way to read, learn, and make connections.</footer>
     </main>
   )
 }
@@ -83,5 +99,5 @@ export function AuthGate() {
 
   if (user === undefined) return <main className="auth-desk" aria-busy="true" />
   if (!user) return <AuthScreen onSignedIn={next => void signedIn(next)} />
-  return <App key={user.id} user={user} onSignOut={() => void signOut()} notice={notice} />
+  return <App key={user.id} user={user} onUserUpdated={setUser} onSignOut={() => void signOut()} notice={notice} />
 }
