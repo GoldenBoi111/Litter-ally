@@ -1,0 +1,752 @@
+{
+  "package.json": {
+    "mtime": 1794628763.6456265,
+    "seen": 1794629331.6652951,
+    "ast_hash": "951673134adbcb39dba51759eddde035",
+    "semantic_hash": ""
+  },
+  "server/index.mjs": {
+    "mtime": 1794628765.984737,
+    "seen": 1794629331.665302,
+    "ast_hash": "5f18e934cbb79c0331c34c0d960f9168",
+    "semantic_hash": ""
+  },
+  "src/App.tsx": {
+    "mtime": 1794628768.738239,
+    "seen": 1794629331.66531,
+    "ast_hash": "918d2499e1a433a85fd6df70d858e9a5",
+    "semantic_hash": ""
+  },
+  "src/main.tsx": {
+    "mtime": 1794628775.9163918,
+    "seen": 1794629331.665332,
+    "ast_hash": "452c52608a877780fd93cbf95e7f6f6e",
+    "semantic_hash": ""
+  },
+  "src/storage.ts": {
+    "mtime": 1794628777.3536963,
+    "seen": 1794629331.6653361,
+    "ast_hash": "a9fca7ce49ea7fe0e1f097234dad7cfd",
+    "semantic_hash": ""
+  },
+  "src/vite-env.d.ts": {
+    "mtime": 1794628778.5140872,
+    "seen": 1794629331.665339,
+    "ast_hash": "0352474ba2918efe13895edbc3780d94",
+    "semantic_hash": ""
+  },
+  "tsconfig.json": {
+    "mtime": 1794628778.9479618,
+    "seen": 1794629331.66534,
+    "ast_hash": "35ea9e6d22170572e0507b3c94e91415",
+    "semantic_hash": ""
+  },
+  "vite.config.ts": {
+    "mtime": 1794628780.503237,
+    "seen": 1794629331.665344,
+    "ast_hash": "b77fb1e19bb3e0bf66d8f977e6814d14",
+    "semantic_hash": ""
+  },
+  "server/agent-actions.mjs": {
+    "mtime": 1794628765.6921265,
+    "seen": 1794629331.665301,
+    "ast_hash": "b1844c2da29e5322cc586ae9669e9cc5",
+    "semantic_hash": ""
+  },
+  "server/agent-actions.test.mjs": {
+    "mtime": 1794628765.839673,
+    "seen": 1794629331.665302,
+    "ast_hash": "1cdd9923d9e8b77c700766a66d15c4bc",
+    "semantic_hash": ""
+  },
+  "scripts/benchmark-local-voice.mjs": {
+    "mtime": 1794628763.7870824,
+    "seen": 1794629331.6652958,
+    "ast_hash": "86db4971a9899686404beeb2c1ff1826",
+    "semantic_hash": ""
+  },
+  "scripts/benchmark-voice.mjs": {
+    "mtime": 1794628763.9246523,
+    "seen": 1794629331.6652968,
+    "ast_hash": "b155222b739dec9479c631a2064fc163",
+    "semantic_hash": ""
+  },
+  "scripts/run-paper-board.ps1": {
+    "mtime": 1794628764.2086341,
+    "seen": 1794629331.665298,
+    "ast_hash": "04181351df011d440580a366a8ba6d1c",
+    "semantic_hash": ""
+  },
+  "scripts/setup-voice.ps1": {
+    "mtime": 1794628764.3517375,
+    "seen": 1794629331.665298,
+    "ast_hash": "d6712fb5589f5bfcaf787e4333ea6788",
+    "semantic_hash": ""
+  },
+  "scripts/start-voice-services.ps1": {
+    "mtime": 1794628764.6380854,
+    "seen": 1794629331.665299,
+    "ast_hash": "66557bf461fd1646fbf99d88667ffe2d",
+    "semantic_hash": ""
+  },
+  "scripts/stop-voice-services.ps1": {
+    "mtime": 1794628764.781986,
+    "seen": 1794629331.6653,
+    "ast_hash": "0fea6d73bc88643fff4ab2a3dc6cfb63",
+    "semantic_hash": ""
+  },
+  "server/learning.mjs": {
+    "mtime": 1794628766.5561063,
+    "seen": 1794629331.665304,
+    "ast_hash": "b3fabf13eab389a62d110abdb3a09fd7",
+    "semantic_hash": ""
+  },
+  "server/lesson-plan.mjs": {
+    "mtime": 1794628766.844579,
+    "seen": 1794629331.6653051,
+    "ast_hash": "c5001746164e96df6743482b9abe0886",
+    "semantic_hash": ""
+  },
+  "server/lesson-plan.test.mjs": {
+    "mtime": 1794628766.989896,
+    "seen": 1794629331.6653051,
+    "ast_hash": "e2f68fd261948f512a1af673a7a10e64",
+    "semantic_hash": ""
+  },
+  "server/paper-text.test.mjs": {
+    "mtime": 1794628767.275153,
+    "seen": 1794629331.665306,
+    "ast_hash": "53c238ad0efa514c2160c55193d86531",
+    "semantic_hash": ""
+  },
+  "server/voice.mjs": {
+    "mtime": 1794628768.1384773,
+    "seen": 1794629331.665308,
+    "ast_hash": "11292be41b1e6601f1a4f981743a6197",
+    "semantic_hash": ""
+  },
+  "server/voice.test.mjs": {
+    "mtime": 1794628768.3034642,
+    "seen": 1794629331.665309,
+    "ast_hash": "78314c7e62f221723ebf277a2e7839b9",
+    "semantic_hash": ""
+  },
+  "src/TutorPanel.tsx": {
+    "mtime": 1794628768.8770134,
+    "seen": 1794629331.6653109,
+    "ast_hash": "3471621cee09003a44c61100c30f64ad",
+    "semantic_hash": ""
+  },
+  "src/hybridTutor.ts": {
+    "mtime": 1794628769.5811417,
+    "seen": 1794629331.665313,
+    "ast_hash": "a1757eaaa8d739b71d4e52619b17e62d",
+    "semantic_hash": ""
+  },
+  "src/learning.ts": {
+    "mtime": 1794628769.8758535,
+    "seen": 1794629331.665313,
+    "ast_hash": "3b34a25a40f6fe971c243e676494944d",
+    "semantic_hash": ""
+  },
+  "src/lessonAgent.ts": {
+    "mtime": 1794628770.0192165,
+    "seen": 1794629331.665314,
+    "ast_hash": "a184d193148199209e44caa3e3b20540",
+    "semantic_hash": ""
+  },
+  "src/ocr.ts": {
+    "mtime": 1794628776.3562074,
+    "seen": 1794629331.665333,
+    "ast_hash": "c7f7e48ae9e5f522ce84977cc41fa1b7",
+    "semantic_hash": ""
+  },
+  "src/paper-text.d.mts": {
+    "mtime": 1794628776.4980571,
+    "seen": 1794629331.665334,
+    "ast_hash": "7f2ee30572cb7ac3f414ab63f2a444bf",
+    "semantic_hash": ""
+  },
+  "src/paper-text.mjs": {
+    "mtime": 1794628776.640166,
+    "seen": 1794629331.665334,
+    "ast_hash": "e76ee2a0ceb302b8f6d160b2267de2ae",
+    "semantic_hash": ""
+  },
+  "src/pdfImport.ts": {
+    "mtime": 1794628776.7842016,
+    "seen": 1794629331.665335,
+    "ast_hash": "7c648a13cc2a57746ded2ec39ce6eaf8",
+    "semantic_hash": ""
+  },
+  "src/pdfPages.ts": {
+    "mtime": 1794628776.9286168,
+    "seen": 1794629331.665335,
+    "ast_hash": "e813ec24c157e8c676679da85989e2df",
+    "semantic_hash": ""
+  },
+  "src/voice-turn.d.mts": {
+    "mtime": 1794628778.661055,
+    "seen": 1794629331.665339,
+    "ast_hash": "51f85f860690547a6d99d64eb294fb73",
+    "semantic_hash": ""
+  },
+  "src/voice-turn.mjs": {
+    "mtime": 1794628778.8039768,
+    "seen": 1794629331.66534,
+    "ast_hash": "854d5e2ce2e91df7ec26d8ed7de35344",
+    "semantic_hash": ""
+  },
+  "tts-benchmark/benchmarks/results.json": {
+    "mtime": 1794628779.3751066,
+    "seen": 1794629331.665341,
+    "ast_hash": "43001b4ec306f1cb68139277bbb6e131",
+    "semantic_hash": ""
+  },
+  "tts-benchmark/config.json": {
+    "mtime": 1794628779.6642349,
+    "seen": 1794629331.665341,
+    "ast_hash": "16323e9c52334d2e552426350700397c",
+    "semantic_hash": ""
+  },
+  "tts-benchmark/scripts/setup.ps1": {
+    "mtime": 1794628779.9449556,
+    "seen": 1794629331.6653419,
+    "ast_hash": "225b3afdd50a14c8c4b73e9378c25857",
+    "semantic_hash": ""
+  },
+  "tts-benchmark/scripts/synthesize_breeze.ps1": {
+    "mtime": 1794628780.0855384,
+    "seen": 1794629331.6653419,
+    "ast_hash": "6da04af17509fd51bf2106cd1238f756",
+    "semantic_hash": ""
+  },
+  "tts-benchmark/scripts/synthesize_qwen.ps1": {
+    "mtime": 1794628780.2261586,
+    "seen": 1794629331.665343,
+    "ast_hash": "0f5c55be4f9aad60fcedeed33651b1d8",
+    "semantic_hash": ""
+  },
+  "tts-benchmark/scripts/validate_outputs.py": {
+    "mtime": 1794628780.364202,
+    "seen": 1794629331.665343,
+    "ast_hash": "dda4e02812d0d06aea472f0fcc7059cb",
+    "semantic_hash": ""
+  },
+  "AGENTS.md": {
+    "mtime": 1794628170.9928455,
+    "seen": 1794629331.665344,
+    "ast_hash": "486d88d32323b4d822eb2be414315ac2",
+    "semantic_hash": ""
+  },
+  "GEMINI.md": {
+    "mtime": 1794628756.26317,
+    "seen": 1794629331.665345,
+    "ast_hash": "86c3c12d47c10f4f46b84beaca0bdbfa",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1794628756.3623497,
+    "seen": 1794629331.665345,
+    "ast_hash": "2ef1109b2be25173177cd9e39f669e68",
+    "semantic_hash": ""
+  },
+  "docs/aegis/plans/2026-11-10-agent-led-teaching-canvas.md": {
+    "mtime": 1794628756.657792,
+    "seen": 1794629331.6653461,
+    "ast_hash": "66833170a66151f66f8c2aa4b9afe2c1",
+    "semantic_hash": ""
+  },
+  "docs/hybrid-voice.md": {
+    "mtime": 1794628757.5058591,
+    "seen": 1794629331.665349,
+    "ast_hash": "26a162d56a2bf3ada50f2d2ba6445054",
+    "semantic_hash": ""
+  },
+  "index.html": {
+    "mtime": 1794628763.357831,
+    "seen": 1794629331.665349,
+    "ast_hash": "3386e3313e6345603c3c743af91b017f",
+    "semantic_hash": ""
+  },
+  "tts-benchmark/README.md": {
+    "mtime": 1794628779.2364697,
+    "seen": 1794629331.66535,
+    "ast_hash": "fa6e6cee8926f0222009687f4f78b4c2",
+    "semantic_hash": ""
+  },
+  "tts-benchmark/benchmarks/results.md": {
+    "mtime": 1794628779.5206556,
+    "seen": 1794629331.66535,
+    "ast_hash": "7ee0d2ef951ca768f06a86ee06eabe09",
+    "semantic_hash": ""
+  },
+  "tts-benchmark/passage.txt": {
+    "mtime": 1794628779.8013117,
+    "seen": 1794629331.665351,
+    "ast_hash": "9ad81bf7d02a6a95fed3761b5baf08dc",
+    "semantic_hash": ""
+  },
+  ".mcp.json": {
+    "mtime": 1794628168.564577,
+    "seen": 1794629331.665291,
+    "ast_hash": "63bd7f4e6c6a9b4f86e4852c62cde7f6",
+    "semantic_hash": ""
+  },
+  "components.json": {
+    "mtime": 1794628756.515438,
+    "seen": 1794629331.6652942,
+    "ast_hash": "7e4ad43a0f6575955c0a6c1d2f9133b3",
+    "semantic_hash": ""
+  },
+  "scripts/download-verified.ps1": {
+    "mtime": 1794628764.065841,
+    "seen": 1794629331.6652968,
+    "ast_hash": "1af225815ec082fec8ec7bb1da594858",
+    "semantic_hash": ""
+  },
+  "scripts/start-voice-rtc.ps1": {
+    "mtime": 1794628764.4930663,
+    "seen": 1794629331.665299,
+    "ast_hash": "94333a4d8bb4fcc597398ac91adaf89b",
+    "semantic_hash": ""
+  },
+  "scripts/test-setup-download.ps1": {
+    "mtime": 1794628764.925228,
+    "seen": 1794629331.6653,
+    "ast_hash": "5ea808afc854c9a068b83f4341a195ba",
+    "semantic_hash": ""
+  },
+  "server/agent-actions.d.mts": {
+    "mtime": 1794628765.5151432,
+    "seen": 1794629331.665301,
+    "ast_hash": "27cd04cfe1e5b3a2be861dd873c92aa3",
+    "semantic_hash": ""
+  },
+  "server/learning-agent.mjs": {
+    "mtime": 1794628766.131051,
+    "seen": 1794629331.665303,
+    "ast_hash": "8cb5944419ae510cfa04691dcf939b8a",
+    "semantic_hash": ""
+  },
+  "server/learning-agent.test.mjs": {
+    "mtime": 1794628766.2727964,
+    "seen": 1794629331.665303,
+    "ast_hash": "b5fa2dda4c8da1af9215118736e64686",
+    "semantic_hash": ""
+  },
+  "server/learning-graph.test.mjs": {
+    "mtime": 1794628766.414343,
+    "seen": 1794629331.665303,
+    "ast_hash": "20ceb0fe410d0fee650551366bf8723c",
+    "semantic_hash": ""
+  },
+  "server/learning.test.mjs": {
+    "mtime": 1794628766.7007444,
+    "seen": 1794629331.665304,
+    "ast_hash": "7a182e91db9670f0369168d91df5bb09",
+    "semantic_hash": ""
+  },
+  "server/openai.mjs": {
+    "mtime": 1794628767.133064,
+    "seen": 1794629331.665306,
+    "ast_hash": "b0651d43a37e3c4157da335125723181",
+    "semantic_hash": ""
+  },
+  "server/source-import.mjs": {
+    "mtime": 1794628767.5664418,
+    "seen": 1794629331.665306,
+    "ast_hash": "e2579f0be4ad53f1ef2fe32c89dd2e77",
+    "semantic_hash": ""
+  },
+  "server/storage-concurrency.test.mjs": {
+    "mtime": 1794628767.7073932,
+    "seen": 1794629331.6653068,
+    "ast_hash": "5cbab35b9355f48472259c0b6a2ce59e",
+    "semantic_hash": ""
+  },
+  "server/teaching-beat-execution.test.mjs": {
+    "mtime": 1794628767.849367,
+    "seen": 1794629331.6653068,
+    "ast_hash": "c52189ad3d7a98689e7939935376f3f1",
+    "semantic_hash": ""
+  },
+  "server/test_voice_rtc_config.py": {
+    "mtime": 1794628767.9934192,
+    "seen": 1794629331.665308,
+    "ast_hash": "495e052dbf2f53aa9ac45f0ab502675c",
+    "semantic_hash": ""
+  },
+  "server/voice_rtc.py": {
+    "mtime": 1794628768.4487126,
+    "seen": 1794629331.665309,
+    "ast_hash": "c9601aa4bac25bf09c9e6689ce87000c",
+    "semantic_hash": ""
+  },
+  "server/voice_rtc_config.py": {
+    "mtime": 1794628768.5902863,
+    "seen": 1794629331.665309,
+    "ast_hash": "a3a81f8aa64aba434c47282dbfabcf1b",
+    "semantic_hash": ""
+  },
+  "src/astryx-themes.ts": {
+    "mtime": 1794628769.0166,
+    "seen": 1794629331.6653109,
+    "ast_hash": "021c86ab3cabf9c197b5c8e776db19ef",
+    "semantic_hash": ""
+  },
+  "src/components/ui/button.tsx": {
+    "mtime": 1794628769.1585593,
+    "seen": 1794629331.6653109,
+    "ast_hash": "2f747f9bb455a908b82e494cb5e93baf",
+    "semantic_hash": ""
+  },
+  "src/components/ui/input.tsx": {
+    "mtime": 1794628769.298922,
+    "seen": 1794629331.665312,
+    "ast_hash": "7158f7a50ecb53394a00bc662de2436a",
+    "semantic_hash": ""
+  },
+  "src/components/ui/tabs.tsx": {
+    "mtime": 1794628769.4388037,
+    "seen": 1794629331.665312,
+    "ast_hash": "fa44fc10c523d9830d5b887a2ddd43e7",
+    "semantic_hash": ""
+  },
+  "src/lib/field-class.ts": {
+    "mtime": 1794628770.1565382,
+    "seen": 1794629331.665314,
+    "ast_hash": "5b1a345466a92b6f582cff629c56d6b3",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/builder.ts": {
+    "mtime": 1794628770.299954,
+    "seen": 1794629331.6653152,
+    "ast_hash": "56357c68faf0aa2bcf49f51fc9b14fe4",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/fills.ts": {
+    "mtime": 1794628770.440896,
+    "seen": 1794629331.6653152,
+    "ast_hash": "a40ecec57366ca50d9e2e8e035ec6a36",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/geom.ts": {
+    "mtime": 1794628770.5833004,
+    "seen": 1794629331.665316,
+    "ast_hash": "9f4b66d7eb44cce19e8773b3cfe201b6",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/index.ts": {
+    "mtime": 1794628770.7310536,
+    "seen": 1794629331.665316,
+    "ast_hash": "fef7ef94d3b4951bc523e3446d1e3b61",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/noise.ts": {
+    "mtime": 1794628770.8785093,
+    "seen": 1794629331.665316,
+    "ast_hash": "8c8b7460980fedab2fd73cde9c8826a5",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/paint.ts": {
+    "mtime": 1794628771.0169656,
+    "seen": 1794629331.665317,
+    "ast_hash": "f3f7dab8a4b0f57d1dbcab7962381c0b",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/pen.ts": {
+    "mtime": 1794628771.1579335,
+    "seen": 1794629331.665317,
+    "ast_hash": "62e59e33ae213722fe743d0e6b103e35",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/pens.ts": {
+    "mtime": 1794628771.3007777,
+    "seen": 1794629331.665317,
+    "ast_hash": "cd58a51678e1bd0a279fee91418803c9",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/react/cache.ts": {
+    "mtime": 1794628771.4552178,
+    "seen": 1794629331.6653178,
+    "ast_hash": "492b6f25aada7777749b6ae278024dcb",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/react/defs.tsx": {
+    "mtime": 1794628771.597651,
+    "seen": 1794629331.6653178,
+    "ast_hash": "195e78f084ffd1db5d8b1a4aa99f41dd",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/react/ensure-defs.ts": {
+    "mtime": 1794628771.7400494,
+    "seen": 1794629331.665319,
+    "ast_hash": "85dcea967e1b691fc12abd0023feb5d9",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/react/hooks.ts": {
+    "mtime": 1794628771.8837037,
+    "seen": 1794629331.665319,
+    "ast_hash": "a8cdf07d0edc79f358963ee875089f59",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/react/icon-size.ts": {
+    "mtime": 1794628772.030854,
+    "seen": 1794629331.665319,
+    "ast_hash": "f17c9adbc5b031984677335fd1496a1d",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/react/index.ts": {
+    "mtime": 1794628772.1726623,
+    "seen": 1794629331.66532,
+    "ast_hash": "cf79370cd59a37d925045a5f506e2a68",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/react/ink-layer.tsx": {
+    "mtime": 1794628772.3167102,
+    "seen": 1794629331.66532,
+    "ast_hash": "8597fababba365f365eb2f9080ad512f",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/react/provider.tsx": {
+    "mtime": 1794628772.4643393,
+    "seen": 1794629331.6653209,
+    "ast_hash": "82374b49be90f1a332a864ba1f14d08b",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/react/svg.tsx": {
+    "mtime": 1794628772.608547,
+    "seen": 1794629331.665323,
+    "ast_hash": "da1fbb9f6adc467b88f773c19ab94dea",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/button-ink.ts": {
+    "mtime": 1794628772.7537723,
+    "seen": 1794629331.665323,
+    "ast_hash": "cd07d72e7b076b0cdd33599e66e3adda",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/draw-on-ink.ts": {
+    "mtime": 1794628772.8954396,
+    "seen": 1794629331.665324,
+    "ast_hash": "f0f1417fb93dbacb338e7aa56beaacbf",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/field-error-ink.ts": {
+    "mtime": 1794628773.042662,
+    "seen": 1794629331.665324,
+    "ast_hash": "3ec3f3d754bfcedab827829ac4498dcf",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/field-frame-ink.ts": {
+    "mtime": 1794628773.1836638,
+    "seen": 1794629331.665324,
+    "ast_hash": "f854f4c495ded3fa916d92af7d8dda8e",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/index.ts": {
+    "mtime": 1794628773.3249717,
+    "seen": 1794629331.6653252,
+    "ast_hash": "710bda43800f052a3a7d3dddab0b6cd8",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/input-ink.ts": {
+    "mtime": 1794628773.4682302,
+    "seen": 1794629331.6653252,
+    "ast_hash": "d75819977dbbbfe02b9c2c868eeeeba5",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/margin-bracket-ink.ts": {
+    "mtime": 1794628773.6126022,
+    "seen": 1794629331.665326,
+    "ast_hash": "2f7ccebb73d863ab1c9eaf0c90cf196e",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/mark-reveal-ink.ts": {
+    "mtime": 1794628773.7563694,
+    "seen": 1794629331.665326,
+    "ast_hash": "50bcbedb3697bed1ee156d80f8b0e7d4",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/overlay-ink.ts": {
+    "mtime": 1794628773.8987942,
+    "seen": 1794629331.665326,
+    "ast_hash": "d66205bcba5d55fe71bf783c2e55ad2e",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/pencil-tiles-ink.ts": {
+    "mtime": 1794628774.0414793,
+    "seen": 1794629331.665327,
+    "ast_hash": "e83b09c739295209b8c45add9538a6ce",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/reveal-nib-ink.ts": {
+    "mtime": 1794628774.1776023,
+    "seen": 1794629331.665327,
+    "ast_hash": "45fdd6be029e89c4af411cf5154e3c2b",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/select-frame-ink.ts": {
+    "mtime": 1794628774.3172402,
+    "seen": 1794629331.665328,
+    "ast_hash": "e50218f578d13af40778de5f890a995c",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/tabs-ink.ts": {
+    "mtime": 1794628774.4593558,
+    "seen": 1794629331.665328,
+    "ast_hash": "38cbad020523f251b4062ef771e3ac78",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/recipes/text-marks-ink.ts": {
+    "mtime": 1794628774.6066837,
+    "seen": 1794629331.665328,
+    "ast_hash": "c546bc4bc022e6080893427f4b9c94bd",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/rng.ts": {
+    "mtime": 1794628774.7498052,
+    "seen": 1794629331.665329,
+    "ast_hash": "cd9131d5f3aaa2acddd730b529251b44",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/shapes.ts": {
+    "mtime": 1794628774.8957536,
+    "seen": 1794629331.665329,
+    "ast_hash": "94c69b226daa6bb015472da9ae7caa9b",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/textures-paper.generated.ts": {
+    "mtime": 1794628775.0332398,
+    "seen": 1794629331.66533,
+    "ast_hash": "d293b61e75e40c819df7dca834e2039b",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/textures.generated.ts": {
+    "mtime": 1794628775.180234,
+    "seen": 1794629331.66533,
+    "ast_hash": "dd116e08bdb0023f423e60ac9d5465d2",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/textures.ts": {
+    "mtime": 1794628775.3228014,
+    "seen": 1794629331.665331,
+    "ast_hash": "df10a558e05e975da666b2edd8b2068d",
+    "semantic_hash": ""
+  },
+  "src/lib/ink/types.ts": {
+    "mtime": 1794628775.4692729,
+    "seen": 1794629331.665331,
+    "ast_hash": "480940f1e40fd00ee6351a47f434b715",
+    "semantic_hash": ""
+  },
+  "src/lib/utils.ts": {
+    "mtime": 1794628775.6201134,
+    "seen": 1794629331.665331,
+    "ast_hash": "9a4cc6f9f3155ffdc1fa7c2c097f6429",
+    "semantic_hash": ""
+  },
+  "src/margin.d.ts": {
+    "mtime": 1794628776.0694525,
+    "seen": 1794629331.665332,
+    "ast_hash": "0a89be9ea8e926d373b3aac6f1096954",
+    "semantic_hash": ""
+  },
+  "src/margin.js": {
+    "mtime": 1794628776.2163913,
+    "seen": 1794629331.665333,
+    "ast_hash": "5757a4d47c310e456f8e3a16477251c0",
+    "semantic_hash": ""
+  },
+  "src/sourceImage.ts": {
+    "mtime": 1794628777.0709407,
+    "seen": 1794629331.6653361,
+    "ast_hash": "096c2f719f5a4d4b3b64505a3160347d",
+    "semantic_hash": ""
+  },
+  "src/sourceImport.ts": {
+    "mtime": 1794628777.2128682,
+    "seen": 1794629331.6653361,
+    "ast_hash": "62c40f9600e0062c1a7348665b6725b4",
+    "semantic_hash": ""
+  },
+  "src/themes/margin/margin.css.d.ts": {
+    "mtime": 1794628777.7874398,
+    "seen": 1794629331.665337,
+    "ast_hash": "4dbfd6777d103657b8af7c6b288ea541",
+    "semantic_hash": ""
+  },
+  "src/themes/margin/margin.d.ts": {
+    "mtime": 1794628777.9360187,
+    "seen": 1794629331.665337,
+    "ast_hash": "7f8ce299e7fd08464df05bbb2d0c404f",
+    "semantic_hash": ""
+  },
+  "src/themes/margin/margin.js": {
+    "mtime": 1794628778.082446,
+    "seen": 1794629331.665338,
+    "ast_hash": "f09469315042c582d2b27445bdf77694",
+    "semantic_hash": ""
+  },
+  "src/themes/margin/marginTheme.doc.mjs": {
+    "mtime": 1794628778.2281628,
+    "seen": 1794629331.665338,
+    "ast_hash": "cd7f9e6278f0e256b45ff91bbda2efab",
+    "semantic_hash": ""
+  },
+  "src/themes/margin/marginTheme.ts": {
+    "mtime": 1794628778.373703,
+    "seen": 1794629331.665338,
+    "ast_hash": "e69d6e11bf564ab360fc449d0fba05fe",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1794628168.5648859,
+    "seen": 1794629331.665345,
+    "ast_hash": "486d88d32323b4d822eb2be414315ac2",
+    "semantic_hash": ""
+  },
+  "docs/aegis/plans/2026-11-12-local-voice-webrtc.md": {
+    "mtime": 1794628756.79548,
+    "seen": 1794629331.6653461,
+    "ast_hash": "7872ae36e545e88afd57f51f1f7ca035",
+    "semantic_hash": ""
+  },
+  "docs/aegis/plans/2026-11-13-source-agnostic-learning-implementation.md": {
+    "mtime": 1794628756.9335442,
+    "seen": 1794629331.665347,
+    "ast_hash": "33f4c56186942abef60fcb8943233f56",
+    "semantic_hash": ""
+  },
+  "docs/aegis/plans/2026-11-13-source-agnostic-learning.md": {
+    "mtime": 1794628757.0736127,
+    "seen": 1794629331.665347,
+    "ast_hash": "629aca8d1d7070142220955b64df2524",
+    "semantic_hash": ""
+  },
+  "docs/aegis/work/2026-11-13-source-agnostic/10-intent.md": {
+    "mtime": 1794628757.218732,
+    "seen": 1794629331.665348,
+    "ast_hash": "591515684edbca5d3ce4de2347ff8064",
+    "semantic_hash": ""
+  },
+  "docs/aegis/work/2026-11-13-source-agnostic/20-checkpoint.md": {
+    "mtime": 1794628757.3620477,
+    "seen": 1794629331.665348,
+    "ast_hash": "b2bbaef64fcbcd87e5e653d7d01bcd61",
+    "semantic_hash": ""
+  },
+  "server/requirements-voice-rtc.txt": {
+    "mtime": 1794628767.422487,
+    "seen": 1794629331.665349,
+    "ast_hash": "c26d54737d9a4123f0835b7ad09cf4da",
+    "semantic_hash": ""
+  },
+  "package-lock.json": {
+    "mtime": 1794628763.50189,
+    "seen": 1794629331.665351,
+    "ast_hash": "658c0b3140528c554a2cd673d0f136a4",
+    "semantic_hash": ""
+  }
+}
