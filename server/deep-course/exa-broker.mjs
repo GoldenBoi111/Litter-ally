@@ -3,6 +3,20 @@ import { z } from 'zod'
 import { backgroundSearchDomains, isReputableSourceUrl } from '../learning-agent.mjs'
 import { paths, slug } from './workspace.mjs'
 
+/** One Exa search restricted to reputable scholarly and official sites. Returns [{ title, url, excerpt }]. */
+export async function searchBackground({ apiKey, query, numResults = 5, fetchImpl = fetch }) {
+  const response = await fetchImpl('https://api.exa.ai/search', {
+    method: 'POST', signal: AbortSignal.timeout(30_000),
+    headers: { 'x-api-key': apiKey, 'content-type': 'application/json' },
+    body: JSON.stringify({ query, type: 'auto', numResults, includeDomains: backgroundSearchDomains, contents: { highlights: true } }),
+  })
+  if (!response.ok) throw new Error(`Background search failed (HTTP ${response.status}).`)
+  const result = await response.json()
+  return (result.results || []).flatMap(item => item?.url && isReputableSourceUrl(item.url)
+    ? [{ title: String(item.title || item.url).slice(0, 200), url: item.url, excerpt: (item.highlights || []).join(' ').trim().slice(0, 900) }]
+    : [])
+}
+
 /**
  * One gate for every Exa call in a job. Limits are enforced here, never left to a prompt:
  * - each reader may search at most `perReader` times (tier 1); past that the tool tells it to escalate
@@ -22,22 +36,9 @@ export function createExaBroker({ apiKey, workspace, budget = 5, perReader = 1, 
 
   async function callExa(concept) {
     stats.apiCalls++
-    const response = await fetchImpl('https://api.exa.ai/search', {
-      method: 'POST', signal: AbortSignal.timeout(30_000),
-      headers: { 'x-api-key': apiKey, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        query: `${concept} explained`, type: 'auto', numResults: 5, includeDomains: backgroundSearchDomains,
-        contents: { highlights: true },
-      }),
-    })
-    if (!response.ok) throw new Error(`Background search failed (HTTP ${response.status}).`)
-    const result = await response.json()
+    const results = await searchBackground({ apiKey, query: `${concept} explained`, fetchImpl })
     const lines = [`# ${concept}`, '']
-    for (const item of result.results || []) {
-      if (!item?.url || !isReputableSourceUrl(item.url)) continue
-      const excerpt = (item.highlights || []).join(' ').trim().slice(0, 900)
-      lines.push(`## ${String(item.title || item.url).slice(0, 200)}`, item.url, excerpt, '')
-    }
+    for (const item of results) lines.push(`## ${item.title}`, item.url, item.excerpt, '')
     const markdown = lines.join('\n').trim()
     await workspace.write(paths.ref(concept), markdown)
     return markdown
