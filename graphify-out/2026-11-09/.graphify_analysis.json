@@ -1,0 +1,217 @@
+{
+  "communities": {
+    "0": [
+      "package",
+      "package_devdependencies",
+      "package_devdependencies_astryxdesign_cli",
+      "package_devdependencies_types_react",
+      "package_devdependencies_types_react_dom",
+      "package_devdependencies_typescript",
+      "package_name",
+      "package_private",
+      "package_scripts",
+      "package_scripts_build",
+      "package_scripts_dev",
+      "package_scripts_preview",
+      "package_type",
+      "package_version",
+      "ref_astryxdesign_cli",
+      "ref_types_react",
+      "ref_types_react_dom",
+      "ref_typescript"
+    ],
+    "1": [
+      "package_dependencies",
+      "package_dependencies_concurrently",
+      "package_dependencies_express",
+      "package_dependencies_ipaddr_js",
+      "package_dependencies_multer",
+      "package_dependencies_pdfjs_dist",
+      "package_dependencies_tldraw",
+      "package_dependencies_vite",
+      "package_dependencies_vitejs_plugin_react",
+      "ref_concurrently",
+      "ref_express",
+      "ref_ipaddr_js",
+      "ref_multer",
+      "ref_pdfjs_dist",
+      "ref_tldraw",
+      "ref_vite",
+      "ref_vitejs_plugin_react",
+      "vite_config"
+    ],
+    "2": [
+      "tsconfig",
+      "tsconfig_compileroptions",
+      "tsconfig_compileroptions_allowimportingtsextensions",
+      "tsconfig_compileroptions_isolatedmodules",
+      "tsconfig_compileroptions_jsx",
+      "tsconfig_compileroptions_lib",
+      "tsconfig_compileroptions_module",
+      "tsconfig_compileroptions_moduleresolution",
+      "tsconfig_compileroptions_noemit",
+      "tsconfig_compileroptions_nounusedlocals",
+      "tsconfig_compileroptions_nounusedparameters",
+      "tsconfig_compileroptions_resolvejsonmodule",
+      "tsconfig_compileroptions_skiplibcheck",
+      "tsconfig_compileroptions_strict",
+      "tsconfig_compileroptions_target",
+      "tsconfig_compileroptions_usedefineforclassfields",
+      "tsconfig_include"
+    ],
+    "3": [
+      "ref_node_dns",
+      "ref_node_http",
+      "ref_node_https",
+      "ref_node_path",
+      "server_index",
+      "server_index_app",
+      "server_index_createteachingplan",
+      "server_index_extractpdf",
+      "server_index_fetchremotepdf",
+      "server_index_normalizesource",
+      "server_index_pinnedpublicaddress",
+      "server_index_publicaddress",
+      "server_index_requestpdf",
+      "server_index_responsetext",
+      "server_index_teachingplanschema",
+      "server_index_upload"
+    ],
+    "4": [
+      "src_app",
+      "src_app_app",
+      "src_app_errormessage",
+      "src_app_importresult",
+      "src_app_initializepapercanvas",
+      "src_app_intakepanel",
+      "src_app_intakepanelprops",
+      "src_app_placeteachingplan",
+      "src_app_readapiresult",
+      "src_app_readteachingplan",
+      "src_app_teachingplan",
+      "src_storage",
+      "src_storage_importedpaper",
+      "src_storage_listpapers",
+      "src_storage_openlibrary",
+      "src_storage_savepaper"
+    ],
+    "5": [
+      "ref_node_assert",
+      "ref_node_test",
+      "server_agent_actions",
+      "server_agent_actions_colors",
+      "server_agent_actions_diagramplanschema",
+      "server_agent_actions_isnumber",
+      "server_agent_actions_pointschema",
+      "server_agent_actions_shapekinds",
+      "server_agent_actions_test",
+      "server_agent_actions_test_valid",
+      "server_agent_actions_validatediagramplan",
+      "server_agent_actions_validid"
+    ],
+    "6": [
+      "package_dependencies_astryxdesign_core",
+      "package_dependencies_react",
+      "package_dependencies_react_dom",
+      "ref_astryxdesign_core",
+      "ref_react",
+      "ref_react_dom",
+      "src_intake",
+      "src_main",
+      "src_style"
+    ],
+    "7": [
+      "src_vite_env_d"
+    ]
+  },
+  "cohesion": {
+    "0": 0.13725490196078433,
+    "1": 0.11764705882352941,
+    "2": 0.11764705882352941,
+    "3": 0.15833333333333333,
+    "4": 0.23333333333333334,
+    "5": 0.21212121212121213,
+    "6": 0.2222222222222222,
+    "7": 1.0
+  },
+  "gods": [
+    {
+      "id": "tsconfig_compileroptions",
+      "label": "compilerOptions",
+      "degree": 15
+    },
+    {
+      "id": "src_app_app",
+      "label": "App()",
+      "degree": 10
+    },
+    {
+      "id": "src_storage_listpapers",
+      "label": "listPapers()",
+      "degree": 4
+    },
+    {
+      "id": "src_storage_savepaper",
+      "label": "savePaper()",
+      "degree": 4
+    },
+    {
+      "id": "ref_astryxdesign_core",
+      "label": "@astryxdesign/core",
+      "degree": 4
+    },
+    {
+      "id": "ref_react",
+      "label": "react",
+      "degree": 4
+    },
+    {
+      "id": "package_scripts",
+      "label": "scripts",
+      "degree": 4
+    },
+    {
+      "id": "server_agent_actions_validatediagramplan",
+      "label": "validateDiagramPlan()",
+      "degree": 4
+    },
+    {
+      "id": "server_index_fetchremotepdf",
+      "label": "fetchRemotePdf()",
+      "degree": 3
+    },
+    {
+      "id": "server_index_pinnedpublicaddress",
+      "label": "pinnedPublicAddress()",
+      "degree": 3
+    }
+  ],
+  "surprises": [
+    {
+      "source": "App()",
+      "target": "listPapers()",
+      "source_files": [
+        "src/App.tsx",
+        "src/storage.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "cross-file semantic connection"
+    },
+    {
+      "source": "App()",
+      "target": "savePaper()",
+      "source_files": [
+        "src/App.tsx",
+        "src/storage.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "cross-file semantic connection"
+    }
+  ],
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}
