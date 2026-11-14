@@ -16,6 +16,24 @@ test('accepts a bounded diagram action plan', () => {
   assert.equal(validateDiagramPlan(valid), valid)
 })
 
+test('allows detailed freehand diagrams within the action bound', () => {
+  const actions = Array.from({ length: 39 }, (_, index) => ({
+    _type: 'stroke', id: `line_${index}`, atMs: 0, points: [{ x: index, y: 0 }, { x: index, y: 10 }],
+    color: 'black', size: 'm', closed: false,
+  }))
+  actions.push({ _type: 'text', id: 'label', atMs: 0, x: 0, y: 20, text: 'Bond', color: 'black', size: 'm' })
+  assert.equal(validateDiagramPlan({ actions }).actions.length, 40)
+  assert.throws(() => validateDiagramPlan({ actions: [...actions, { ...actions[0], id: 'extra' }] }), /outside the supported range/)
+})
+
+test('allows a recognizable freehand sketch without a text label', () => {
+  const actions = Array.from({ length: 4 }, (_, index) => ({
+    _type: 'stroke', id: `part_${index}`, atMs: 0, points: [{ x: index * 10, y: 0 }, { x: index * 10, y: 10 }],
+    color: 'black', size: 'm', closed: false,
+  }))
+  assert.equal(validateDiagramPlan({ actions }).actions.length, 4)
+})
+
 test('gives every strict diagram action discriminator an explicit JSON Schema type', () => {
   const variants = diagramPlanSchema.properties.actions.items.anyOf
   assert.deepEqual(variants.map(variant => variant.properties._type), [
