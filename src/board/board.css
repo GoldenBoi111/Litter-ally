@@ -1,0 +1,78 @@
+/* The board: index cards on a desk blotter. Red is reserved for string; nothing else on the board uses it. */
+.board {
+  --string: #a3241b;
+  --string-light: #d4574a;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  position: relative;
+  height: 100%;
+  background: var(--ll-desk-vignette), var(--ll-desk);
+}
+.board .tl-container.tl-theme__light {
+  --tl-color-background: transparent;
+  --tl-color-selected: var(--ll-ink);
+  --tl-color-selection-stroke: var(--ll-ink);
+  --tl-color-selection-fill: color-mix(in srgb, var(--ll-ink) 6%, transparent);
+}
+.board .tl-background { background: transparent; }
+
+/* Cards: lift while dragged so the hand feels the paper. */
+.board-card { pointer-events: all; transition: filter 160ms var(--ease-out), translate 160ms var(--ease-out); }
+.board .tl-shape[data-shape-type='source-card'] { will-change: transform; }
+.tl-container[data-dragging='true'] .board-card,
+.board-card:active { filter: drop-shadow(0 10px 14px rgb(40 36 32 / 0.18)); translate: 0 -2px; }
+.board-card-meta { font-family: var(--font-type); font-size: 15px; color: var(--ll-ink-soft); }
+
+/* String: a shadow, the thread, and a lighter twist so it reads as fibre, not a vector line. */
+.board-string { pointer-events: none; }
+.board-string-svg { position: absolute; inset: 0; overflow: visible; }
+.string-shadow { fill: none; stroke: rgb(40 36 32 / 0.16); stroke-width: 3; transform: translate(2px, 4px); }
+.string-thread { fill: none; stroke: var(--string); stroke-width: 2.4; stroke-linecap: round; }
+.string-twist { fill: none; stroke: var(--string-light); stroke-width: 1; stroke-dasharray: 0.006 0.012; stroke-linecap: round; opacity: 0.8; }
+.string-fresh { stroke-dasharray: 1; stroke-dashoffset: 1; animation: string-draw 420ms var(--ease-out) forwards; }
+.string-twist.string-fresh { animation: string-twist-in 420ms var(--ease-out) forwards; stroke-dasharray: 0.006 0.012; stroke-dashoffset: 0; opacity: 0; }
+@keyframes string-draw { to { stroke-dashoffset: 0; } }
+@keyframes string-twist-in { to { opacity: 0.8; } }
+
+.string-pin-shadow { fill: rgb(40 36 32 / 0.22); }
+.string-pin-head { fill: var(--string); stroke: color-mix(in srgb, var(--string) 70%, black); stroke-width: 1; }
+.string-pin-shine { fill: rgb(255 255 255 / 0.55); }
+
+.board-string-tag { position: absolute; translate: -50% -14px; pointer-events: none; }
+.board-string-tag > * { animation: tag-in 260ms var(--ease-out) both; }
+@keyframes tag-in { from { opacity: 0; scale: 0.94; } }
+
+/* Floating actions: a slip of paper above the canvas, appears instantly (it follows every selection). */
+.board-actions {
+  position: absolute; top: 14px; left: 50%; translate: -50% 0; z-index: 300;
+  display: flex; gap: 4px; padding: 5px;
+  background: var(--ll-paper); border-radius: 6px;
+  box-shadow: 0 1px 0 rgb(40 36 32 / 0.08), 0 6px 18px rgb(40 36 32 / 0.14);
+  pointer-events: all;
+}
+.board-actions button {
+  font: 500 13px/1 var(--font-family-body, system-ui); color: var(--ll-ink);
+  padding: 8px 12px; border: 0; border-radius: 4px; background: transparent; cursor: pointer;
+  transition: background-color 120ms ease, transform 120ms var(--ease-out);
+}
+.board-actions button:hover { background: color-mix(in srgb, var(--ll-ink) 7%, transparent); }
+.board-actions button:active { transform: scale(0.97); }
+.board-actions button[aria-pressed='true'] { background: var(--ll-ink); color: var(--ll-paper); }
+.board-actions button:focus-visible { outline: 2px solid var(--ll-ink); outline-offset: 1px; }
+
+.board-empty {
+  position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px;
+  text-align: center; pointer-events: none; color: var(--ll-ink);
+}
+.board-empty p { margin: 0; font-family: var(--font-script); font-size: 30px; }
+.board-empty .board-empty-hint { font-family: var(--font-family-body, system-ui); font-size: 14px; max-width: 34ch; color: var(--ll-ink-soft); }
+.board-empty button {
+  pointer-events: all; margin-top: 14px; padding: 10px 18px; border: 0; border-radius: 6px;
+  background: var(--ll-ink); color: var(--ll-paper); font: 600 14px/1 var(--font-family-body, system-ui); cursor: pointer;
+  transition: transform 140ms var(--ease-out);
+}
+.board-empty button:active { transform: scale(0.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  .string-fresh, .string-twist.string-fresh, .board-string-tag > * { animation: none; stroke-dashoffset: 0; opacity: 0.8; }
+  .board-card { transition: none; }
+}
