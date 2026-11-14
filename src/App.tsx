@@ -15,6 +15,10 @@ import { importImageSource, importMediaSource, importTextSource } from './source
 import { placeSourceImage } from './sourceImage'
 import { TutorPanel } from './TutorPanel'
 import { Board } from './board/Board'
+import { ProjectsPage } from './pages/ProjectsPage'
+import { ProjectOverview } from './pages/ProjectOverview'
+import './pages/pages.css'
+import { COMPARE_GOAL, DEEP_GOAL, loadProjects, newProject, projectBoardKey, saveProjects, summarizeSource, type Project } from './projects'
 import { PersistentTldraw } from './persistentCanvas'
 import { Wordmark } from './Logo'
 import type { User } from './AuthGate'
@@ -139,9 +143,25 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([])
   const [libraryReady, setLibraryReady] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
-  const [boardOpen, setBoardOpen] = useState(true)
+  type View = 'projects' | 'overview' | 'board' | 'lesson'
+  const [view, setView] = useState<View>('projects')
+  const boardOpen = view !== 'lesson'
+  const [projects, setProjects] = useState<Project[]>([])
+  const projectsRef = useRef(projects)
+  projectsRef.current = projects
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
+  const activeProject = projects.find(p => p.id === activeProjectId) || null
+  const [lessonMode, setLessonMode] = useState<{ kind: 'source' | 'compare' | 'deep'; label: string }>({ kind: 'source', label: '' })
+  const [pendingSummaries, setPendingSummaries] = useState<Set<string>>(new Set())
+  const lessonEntryRef = useRef<{ primary: string; extra: string[]; goal: string } | null>(null)
+  const [pendingGoal, setPendingGoal] = useState<{ goal: string; extra: string[] } | null>(null)
   const openAdd = useCallback(() => { setError(''); setAddOpen(true) }, [])
-  const openLesson = useCallback((sourceId: string) => { setCurrentId(sourceId); setBoardOpen(false) }, [])
+  const updateProjects = useCallback((update: (list: Project[]) => Project[]) => {
+    const next = update(projectsRef.current)
+    projectsRef.current = next
+    setProjects(next)
+    saveProjects(next).catch(reason => setError(errorMessage(reason)))
+  }, [])
   const [stylePanelOpen, setStylePanelOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
@@ -278,6 +298,9 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     setTutorStatus('idle')
     setTutorMicMuted(true)
     setTutorDetail(missingLessonSource ? 'A source used by this saved lesson was removed. Rebuild the plan to continue.' : saved && !restored ? 'This lesson predates page-grounded teaching. Rebuild it to continue.' : '')
+    const entry = lessonEntryRef.current
+    if (entry && entry.primary === currentId) { lessonEntryRef.current = null; startGuidedLesson(entry.extra, entry.goal) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentId])
 
   const persistLessonState = useCallback(async (nextPlan: TeachingPlan, nextCheckpoint: number, resetAssessments = false, targetPaper = currentPaper) => {
