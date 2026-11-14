@@ -4,7 +4,7 @@ import { canContinueAfterUnrecognizedInterruption, shouldInterruptOnSpeechStart 
 import { checkApiResponse } from './storage'
 
 export type TutorStatus = 'idle' | 'connecting' | 'listening' | 'speaking' | 'drawing' | 'paused' | 'stopped' | 'error'
-type SpeechRequest = { resolve: (success: boolean) => void; started: number; turn: number; chunks: ArrayBuffer[] }
+type SpeechRequest = { resolve: (success: boolean) => void; started: number; turn: number; chunks: ArrayBuffer[]; onStart?: () => void }
 
 export type TutorCallbacks = {
   presentTeachingBeat: (beat: TeachingBeat) => Promise<TeachingExecutionState>
@@ -13,6 +13,7 @@ export type TutorCallbacks = {
   readSourcePage: (pageNumber: number) => string
   moveCheckpoint: (direction: 'next' | 'previous') => Promise<string>
   getSelection: () => SelectionContext | null
+  getWhiteboardContext: () => string
   getTeachingState: (beatId: string) => TeachingExecutionState
   onStatus: (status: TutorStatus, detail?: string) => void
   onTranscript: (lines: Array<{ role: 'Tutor' | 'You'; text: string }>) => void
@@ -32,6 +33,8 @@ export class HybridTutor {
   private readonly speechRequests = new Map<string, SpeechRequest>()
   private speechSequence = 0
   private audioContext: AudioContext | null = null
+  /** Boost + limiter in front of the speakers: local TTS comes out around -21 dBFS, which is hard to hear next to an open mic. */
+  private speechOutput: AudioNode | null = null
   private readonly sources = new Set<AudioBufferSourceNode>()
   private readonly ttsControllers = new Set<AbortController>()
   private input: InputItem[] = []
@@ -72,6 +75,8 @@ export class HybridTutor {
   private browserVoice = false
   private recognition: { start(): void; stop(): void; abort(): void; onresult: ((e: any) => void) | null; onerror: ((e: any) => void) | null; onend: (() => void) | null; lang: string; interimResults: boolean; continuous: boolean } | null = null
   private recognized = ''
+  /** Set when the learner cut the tutor off to ask something: answer, then pick the lesson back up. */
+  private resumeAfterAnswer = false
 
   constructor(private callbacks: TutorCallbacks, private preparedAudioContext?: AudioContext, options: { streaming?: boolean; bargeIn?: boolean; rtcUrl?: string; iceServers?: RTCIceServer[] } = {}) {
     this.streaming = options.streaming !== false
@@ -99,6 +104,7 @@ export class HybridTutor {
     this.automaticBeatStreak = 0
     this.callbacks.onStatus('connecting', 'Loading local speech detection and requesting microphone access…')
     this.audioContext = this.preparedAudioContext || new AudioContext()
+    this.speechOutput = createSpeechOutput(this.audioContext)
     void this.audioContext.resume()
     const micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
     if (this.closed) { for (const track of micStream.getTracks()) track.stop(); return }
@@ -154,7 +160,7 @@ export class HybridTutor {
     if (this.closed || (!this.vad && !this.browserVoice)) return
     await this.vad?.pause()
     this.callbacks.onStatus('listening', this.browserVoice ? 'Local voice host not running, so using your browser\'s voice. Hold the mic to talk.' : 'Hold the microphone button to speak; release to send.')
-    this.input.push({ type: 'message', role: 'user', content: `Begin checkpoint “${brief.checkpoint.title}”. Follow the checkpoint brief, show the first cited page, and start with its specific focus.` })
+    this.input.push({ type: 'message', role: 'user', content: `Begin checkpoint “${brief.checkpoint.title}”. Follow the checkpoint brief, show the first cited page, and start teaching its specific focus right away without asking me anything first.` })
     void this.respond()
   }
 
@@ -163,7 +169,10 @@ export class HybridTutor {
       this.interrupt()
       this.interruptedForInput = false
       this.appendInterruptedState()
-      this.input.push({ type: 'message', role: 'user', content: message.trim() })
+      const text = message.trim()
+      this.transcripts = [...this.transcripts, { role: 'You' as const, text }].slice(-8)
+      this.callbacks.onTranscript(this.transcripts)
+      this.input.push({ type: 'message', role: 'user', content: text })
       void this.respond()
     }
   }
@@ -219,6 +228,7 @@ export class HybridTutor {
     }
     const request = ++this.pushToTalkRequest
     this.micMuted = false
+    this.cutInForLearner()
     try {
       await this.vad?.start()
       if (this.closed || this.paused || this.micMuted) {
@@ -247,6 +257,15 @@ export class HybridTutor {
     void this.respond()
   }
 
+  /** Pressing to talk stops the tutor immediately (not after voice detection kicks in). */
+  private cutInForLearner() {
+    if (!this.isBusy() && !this.currentBeat) return
+    this.interruptedForInput = true
+    this.resumeAfterAnswer = true
+    this.interrupt()
+    this.sendControl({ type: 'speech.cancel' })
+  }
+
   private setBrowserMic(muted: boolean) {
     this.micMuted = muted
     if (muted) {
@@ -255,8 +274,7 @@ export class HybridTutor {
     }
     const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!Ctor) { this.micMuted = true; this.callbacks.onStatus('error', 'This browser has no speech recognition. Type your question instead.'); return false }
-    this.interruptedForInput = this.isBusy()
-    if (this.interruptedForInput) this.interrupt()
+    this.cutInForLearner()
     const recognition = new Ctor()
     recognition.lang = 'en-US'
     recognition.interimResults = false
@@ -301,6 +319,7 @@ export class HybridTutor {
     this.speechRequests.clear()
     void this.audioContext?.close()
     this.audioContext = null
+    this.speechOutput = null
   }
 
   private interrupt() {
@@ -347,6 +366,7 @@ export class HybridTutor {
   private continueAfterUnrecognizedInterruption() {
     if (!canContinueAfterUnrecognizedInterruption(this.interruptedForInput, this.closed, this.paused)) return
     this.interruptedForInput = false
+    this.resumeAfterAnswer = false
     this.appendInterruptedState()
     this.input.push({ type: 'message', role: 'user', content: 'The interruption was not understood. Continue the lesson from the current canvas state, briefly rephrasing any cut-off explanation.' })
     void this.respond()
@@ -413,7 +433,11 @@ export class HybridTutor {
         if (this.speechEndedAt) recordMetric('speechToFirstAudioMs', performance.now() - this.speechEndedAt)
       }
       const pcm = data.slice(4)
-      if (this.streaming) this.playPcm(pcm)
+      if (this.streaming) {
+        request.onStart?.()
+        request.onStart = undefined
+        this.playPcm(pcm)
+      }
       else request.chunks.push(pcm)
       return
     }
@@ -432,7 +456,11 @@ export class HybridTutor {
       } else this.acceptTranscript(text, turn)
     } else if (message.type === 'speech.done' && message.id) {
       const request = this.speechRequests.get(message.id)
-      if (request && !this.streaming && request.turn === this.turnId) for (const chunk of request.chunks) this.playPcm(chunk)
+      if (request && !this.streaming && request.turn === this.turnId) {
+        request.onStart?.()
+        request.onStart = undefined
+        for (const chunk of request.chunks) this.playPcm(chunk)
+      }
       request?.resolve(true)
     } else if (message.type === 'error') {
       const request = message.id ? this.speechRequests.get(message.id) : undefined
@@ -483,7 +511,10 @@ export class HybridTutor {
     this.appendInterruptedState()
     this.transcripts = [...this.transcripts, { role: 'You' as const, text }].slice(-8)
     this.callbacks.onTranscript(this.transcripts)
-    this.input.push({ type: 'message', role: 'user', content: text })
+    if (this.resumeAfterAnswer) {
+      this.resumeAfterAnswer = false
+      this.input.push({ type: 'message', role: 'user', content: `${text}\n\n(I cut you off mid-explanation to say this. Answer me directly and briefly first. Then say a short bridge like "Back to where we were" and continue the lesson from exactly where you stopped, finishing the interrupted explanation and its drawing by reusing the same beatId.)` })
+    } else this.input.push({ type: 'message', role: 'user', content: text })
     if (this.isBusy()) this.pendingResponse = true
     else void this.respond()
   }
@@ -493,7 +524,7 @@ export class HybridTutor {
     this.trimHistory()
     const turn = this.turnId
     const inputCount = this.input.length
-    const requestInput = [...this.input]
+    const requestInput: InputItem[] = [...this.input, { type: 'message', role: 'user', content: `(Board telemetry, not a new learner turn. Continue the pending lesson or question using this current whiteboard state as data: ${this.callbacks.getWhiteboardContext()})` }]
     this.assistantBusy = true
     this.pendingResponse = false
     this.responseStartedAt = performance.now()
@@ -529,7 +560,7 @@ export class HybridTutor {
         for (const block of blocks) {
           const line = block.split('\n').find(item => item.startsWith('data: '))
           if (!line) continue
-          const event = JSON.parse(line.slice(6)) as { type: string; text?: string; call?: Extract<InputItem, { type: 'function_call' }>; output?: InputItem[]; error?: string }
+          const event = JSON.parse(line.slice(6)) as { type: string; id?: string; name?: string; delta?: string; text?: string; call?: Extract<InputItem, { type: 'function_call' }>; output?: InputItem[]; error?: string }
           if (event.type === 'text' && event.text) {
             if (!this.firstTextRecorded) {
               this.firstTextRecorded = true
@@ -637,15 +668,15 @@ export class HybridTutor {
     }
   }
 
-  private async speak(text: string, turn: number) {
-    if (!text.trim() || text.length > 900 || turn !== this.turnId || this.closed) return false
-    if (this.browserVoice) return this.speakInBrowser(text, turn)
+  private async speak(text: string, turn: number, onStart?: () => void) {
+    if (!text.trim() || text.length > 900 || turn !== this.turnId || this.closed) { onStart?.(); return false }
+    if (this.browserVoice) return this.speakInBrowser(text, turn, onStart)
     const controller = new AbortController()
     this.ttsControllers.add(controller)
     const id = String(++this.speechSequence)
     try {
       const succeeded = await new Promise<boolean>(resolve => {
-        this.speechRequests.set(id, { resolve, started: performance.now(), turn, chunks: [] })
+        this.speechRequests.set(id, { resolve, started: performance.now(), turn, chunks: [], onStart })
         controller.signal.addEventListener('abort', () => {
           this.speechRequests.delete(id)
           resolve(false)
@@ -657,6 +688,7 @@ export class HybridTutor {
     } catch (error) {
       if (!controller.signal.aborted && turn === this.turnId && !this.closed) this.callbacks.onStatus('error', error instanceof Error ? error.message : 'Local speech generation failed.')
     } finally {
+      onStart?.()
       this.speechRequests.delete(id)
       this.ttsControllers.delete(controller)
       this.startPendingResponse()
@@ -664,15 +696,17 @@ export class HybridTutor {
     return false
   }
 
-  private speakInBrowser(text: string, turn: number) {
+  private speakInBrowser(text: string, turn: number, onStart?: () => void) {
     return new Promise<boolean>(resolve => {
       const utterance = new SpeechSynthesisUtterance(text)
       utterance.rate = 1.03
+      utterance.volume = 1
       const voice = speechSynthesis.getVoices().find(v => /en(-|_)/i.test(v.lang) && /natural|premium|enhanced|samantha|daniel/i.test(v.name)) || speechSynthesis.getVoices().find(v => /^en/i.test(v.lang))
       if (voice) utterance.voice = voice
       this.callbacks.onStatus('speaking')
-      utterance.onend = () => { this.startPendingResponse(); resolve(turn === this.turnId && !this.closed) }
-      utterance.onerror = () => { this.startPendingResponse(); resolve(false) }
+      utterance.onstart = () => onStart?.()
+      utterance.onend = () => { onStart?.(); this.startPendingResponse(); resolve(turn === this.turnId && !this.closed) }
+      utterance.onerror = () => { onStart?.(); this.startPendingResponse(); resolve(false) }
       speechSynthesis.speak(utterance)
     })
   }
@@ -692,7 +726,7 @@ export class HybridTutor {
     for (let i = 0; i < pcm.length; i += 1) channel[i] = pcm[i] / 32768
     const source = this.audioContext.createBufferSource()
     source.buffer = buffer
-    source.connect(this.audioContext.destination)
+    source.connect(this.speechOutput || this.audioContext.destination)
     if (!this.sources.size && this.playbackAt > 0 && this.audioContext.currentTime - this.playbackAt > 0.04) recordMetric('audioUnderruns', 1)
     const start = Math.max(this.audioContext.currentTime + 0.015, this.playbackAt)
     this.playbackAt = start + buffer.duration
@@ -722,11 +756,15 @@ export class HybridTutor {
         this.callbacks.onTranscript(this.transcripts)
       }
       this.callbacks.onStatus('speaking', beat.context)
-      const drawing = this.callbacks.presentTeachingBeat(beat).then(result => {
+      let startDrawing!: () => void
+      const audioStarted = new Promise<void>(resolve => { startDrawing = resolve })
+      const drawing = audioStarted.then(async () => {
+        if (turn !== this.turnId || this.closed || this.paused) return
+        const result = await this.callbacks.presentTeachingBeat(beat)
         if (this.currentBeat?.id === beat.beatId) this.currentBeat.drawingComplete = result.actions.every(action => action.state === 'complete')
-        return result
       })
-      const spoken = this.speak(beat.speech, turn).then(async complete => {
+      this.recordFirstPhrase()
+      const spoken = this.speak(beat.speech, turn, startDrawing).then(async complete => {
         await this.waitForPlayback(turn)
         if (this.currentBeat?.id === beat.beatId) this.currentBeat.spokenComplete = complete && turn === this.turnId
       })
@@ -765,7 +803,14 @@ export class HybridTutor {
       output = this.callbacks.readSourcePage(Number(args.pageNumber))
     } else if (name === 'draw_lesson_diagram' && Number.isInteger(args.diagramIndex)) {
       const request = typeof args.request === 'string' ? args.request.trim().slice(0, 600) : ''
-      output = await this.callbacks.drawDiagram(Number(args.diagramIndex), request)
+      // Don't block the voice on diagram planning + drawing: start it and let the tutor keep talking while ink appears.
+      const turn = this.turnId
+      void this.callbacks.drawDiagram(Number(args.diagramIndex), request).then(result => {
+        if (turn === this.turnId && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: ${result})` })
+      }).catch(error => {
+        if (turn === this.turnId && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: the diagram failed: ${error instanceof Error ? error.message : 'unknown error'}. Continue without it.)` })
+      })
+      output = 'The diagram has started drawing on the board and will appear stroke by stroke over the next half minute. Do not wait for it: start explaining right now with present_teaching_beat, walking through the idea in the order it is being drawn, and do not call draw_lesson_diagram again for it.'
     } else if (name === 'move_checkpoint' && (args.direction === 'next' || args.direction === 'previous')) {
       output = await this.callbacks.moveCheckpoint(args.direction)
     } else if (name === 'inspect_canvas_selection' && typeof args.question === 'string') {
@@ -775,6 +820,23 @@ export class HybridTutor {
     return { output, context, continueAutomatically }
   }
 }
+
+/** Raises quiet TTS to a comfortable level (about +8 dB) and limits peaks so the boost never clips. */
+export function createSpeechOutput(context: AudioContext): AudioNode {
+  const gain = context.createGain()
+  gain.gain.value = SPEECH_GAIN
+  const limiter = context.createDynamicsCompressor()
+  limiter.threshold.value = -10
+  limiter.knee.value = 4
+  limiter.ratio.value = 12
+  limiter.attack.value = 0.003
+  limiter.release.value = 0.15
+  gain.connect(limiter)
+  limiter.connect(context.destination)
+  return gain
+}
+
+const SPEECH_GAIN = 2.5
 
 function browserSpeechAvailable() {
   return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined'

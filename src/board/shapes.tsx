@@ -1,7 +1,9 @@
+import { useLayoutEffect, useRef } from 'react'
 import { HTMLContainer, Polyline2d, Rectangle2d, ShapeUtil, T, Vec, useEditor, useValue, type TLShape, type TLShapeId } from 'tldraw'
 import { IndexCard, IndexCardContent, IndexCardFooter, IndexCardHeader, IndexCardTitle } from '@/components/ui/index-card'
 import { LabelTag, LabelTagTitle } from '@/components/ui/label-tag'
 import { pinPoint, sagCurve, type Pt } from './sag'
+import { CUT_DISSOLVE_MS, CUT_FALL_MS, CUT_TOTAL_MS, cutRopes, ropePath, stepRope } from './cutRope'
 
 export const RELATIONS = ['supports', 'contradicts', 'extends'] as const
 export type Relation = (typeof RELATIONS)[number] | ''
@@ -59,10 +61,12 @@ function stringEnds(editor: ShapeUtil['editor'], shape: RedStringShape): [Pt, Pt
 
 function Pin({ at }: { at: Pt }) {
   return (
-    <g className="string-pin" transform={`translate(${at.x} ${at.y})`}>
-      <ellipse cx={1.5} cy={3} rx={7} ry={4} className="string-pin-shadow" />
-      <circle r={6.5} className="string-pin-head" />
-      <circle r={2.2} cx={-2} cy={-2} className="string-pin-shine" />
+    <g transform={`translate(${at.x} ${at.y})`}>
+      <g className="string-pin">
+        <ellipse cx={1.5} cy={3} rx={7} ry={4} className="string-pin-shadow" />
+        <circle r={6.5} className="string-pin-head" />
+        <circle r={2.2} cx={-2} cy={-2} className="string-pin-shine" />
+      </g>
     </g>
   )
 }
@@ -71,17 +75,81 @@ function RedString({ shape }: { shape: RedStringShape }) {
   const editor = useEditor()
   const ends = useValue('string ends', () => stringEnds(editor, shape), [editor, shape])
   const selected = useValue('string selected', () => editor.getSelectedShapeIds().includes(shape.id), [editor, shape.id])
+  // A cut string snaps at the middle, both halves drop and hang from their pins, then dissolve before Board removes it.
+  // The window is just past the animation, so a cut that is undone later comes back whole.
+  const cut = Date.now() - Number(shape.meta.cutAt || 0) < CUT_TOTAL_MS + 150
+  const still = cut && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const svg = useRef<SVGSVGElement>(null)
+  const body = useRef<SVGGElement>(null)
+  const warp = useRef<SVGFEDisplacementMapElement>(null)
+  const halves = useRef<{ shadow: SVGPathElement | null; thread: SVGPathElement | null; twist: SVGPathElement | null }[]>([{ shadow: null, thread: null, twist: null }, { shadow: null, thread: null, twist: null }])
+  useLayoutEffect(() => {
+    const at = stringEnds(editor, shape)
+    if (!cut || still || !at) return
+    const ropes = cutRopes(at[0], sagCurve(at[0], at[1]).control, at[1])
+    const draw = () => ropes.forEach((rope, i) => {
+      const d = ropePath(rope.points)
+      for (const path of Object.values(halves.current[i])) path?.setAttribute('d', d)
+    })
+    draw()
+    const dt = 1 / 120
+    const start = performance.now()
+    let last = start, carry = 0, dissolving = false, frame = 0
+    const tick = (now: number) => {
+      carry += Math.min(now - last, 50) / 1000
+      last = now
+      for (; carry >= dt; carry -= dt) ropes.forEach(rope => stepRope(rope, dt))
+      draw()
+      const elapsed = now - start
+      if (elapsed >= CUT_FALL_MS) {
+        if (!dissolving) {
+          dissolving = true
+          svg.current?.classList.add('is-dissolving')
+          body.current?.setAttribute('filter', `url(#${filter})`)
+        }
+        const t = Math.min(1, (elapsed - CUT_FALL_MS) / CUT_DISSOLVE_MS)
+        warp.current?.setAttribute('scale', String(38 * (1 - (1 - t) ** 3)))
+      }
+      if (elapsed < CUT_TOTAL_MS) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+    // Runs once per cut; the halves own their geometry from here on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cut, still])
+  const filter = `string-dissolve-${shape.id.replace(/\W/g, '')}`
   if (!ends) return null
   const { d, mid } = sagCurve(ends[0], ends[1])
   // Only a string tied in the last second draws itself in; reloads and scrolling never replay it.
   const fresh = Date.now() - Number(shape.meta.tiedAt || 0) < 1000
   const { relation } = shape.props
+  const falling = cut && !still
   return (
-    <HTMLContainer className={`board-string ${selected ? 'is-selected' : ''}`} style={{ width: 1, height: 1, overflow: 'visible' }}>
-      <svg className="board-string-svg" overflow="visible" width={1} height={1}>
-        <path d={d} className="string-shadow" />
-        <path d={d} pathLength={1} className={`string-thread ${fresh ? 'string-fresh' : ''}`} />
-        <path d={d} pathLength={1} className={`string-twist ${fresh ? 'string-fresh' : ''}`} />
+    <HTMLContainer className={`board-string ${selected ? 'is-selected' : ''} ${cut ? 'is-cut' : ''}`} style={{ width: 1, height: 1, overflow: 'visible' }}>
+      <svg ref={svg} className="board-string-svg" overflow="visible" width={1} height={1}>
+        {falling ? (
+          <>
+            <filter id={filter} x="-50%" y="-20%" width="200%" height="140%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves={2} seed={Number(shape.meta.cutAt) % 97} result="noise" />
+              <feDisplacementMap ref={warp} in="SourceGraphic" in2="noise" scale="0" xChannelSelector="R" yChannelSelector="G" />
+            </filter>
+            {halves.current.map((half, i) => <path key={i} ref={el => { half.shadow = el }} className="string-shadow" />)}
+            <g ref={body} className="string-body">
+              {halves.current.map((half, i) => (
+                <g key={i}>
+                  <path ref={el => { half.thread = el }} pathLength={1} className="string-thread" />
+                  <path ref={el => { half.twist = el }} pathLength={1} className="string-twist" />
+                </g>
+              ))}
+            </g>
+          </>
+        ) : (
+          <>
+            <path d={d} className="string-shadow" />
+            <path d={d} pathLength={1} className={`string-thread ${fresh ? 'string-fresh' : ''}`} />
+            <path d={d} pathLength={1} className={`string-twist ${fresh ? 'string-fresh' : ''}`} />
+          </>
+        )}
         <Pin at={ends[0]} />
         <Pin at={ends[1]} />
       </svg>

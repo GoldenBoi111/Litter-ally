@@ -22,6 +22,7 @@ Requirements below describe the target product. They do not claim that the curre
 | PR-12 | P1 | Supplied material can include the formats and source types supported by the product, with bounded extraction and useful source locations. | Supported imports expose the relevant text, media, and locators; unsupported or uncertain extraction is visible to the learner. | §§3, 10, 16 |
 | PR-13 | P1 | The tutor can use interactive drawings, practice, and review when they help learning. | Optional interactions and checks complement the lesson and do not displace teaching as the primary experience. | §§4, 7–8, 16 |
 | PR-14 | P2 | Learners can export or share a useful representation of their persistent learning workspace as those capabilities are developed. | An export preserves the relevant drawings, relationships, positions, and lesson metadata, and identifies whether source files are included. | §§13, 16 |
+| PR-15 | P1 | Imported documents are classified as content or process material, shown as distinct cards, and process documents guide explanations of content in the same project. | Classification is saved and editable; process documents guide same-project lessons without replacing content evidence or citations. | §§10, 12, 13 |
 
 P0–P2 priorities follow the [MVP implementation scope](product-specification.md#16-mvp-implementation-scope). This index condenses that scope; the full specification controls when detail matters.
 

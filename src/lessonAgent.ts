@@ -137,7 +137,6 @@ export function formatCheckpointBrief(brief: CheckpointBrief) {
     checkpoint.backgroundNotes ? `External background only (do not attribute to the supplied material): ${checkpoint.backgroundNotes}${backgroundLines.length ? `\nReputable sources: ${backgroundLines.join('\n')}` : ''}` : '',
     `Available diagrams (zero-based indexes):\n${diagramLines.length ? diagramLines.join('\n') : 'No prepared diagrams; a learner-requested visual can still be created.'}`,
     `Walkthrough: ${checkpoint.narration}`,
-    `Check for understanding: ${checkpoint.checkForUnderstanding}`,
   ].join('\n')
 }
 
@@ -176,7 +175,14 @@ export type SelectionContext = {
   shapes: Array<{ id: string; type: string; text: string; owner: string; bounds: { x: number; y: number; w: number; h: number } }>
 }
 
-const ACTION_DELAY_MS = 180
+const ACTION_DELAY_MS = 90
+/** Handwriting pace while the tutor speaks. */
+export const BEAT_PACE = 1.6
+/** Local coordinate space the model draws in for each beat (matches the server prompt). */
+const DRAWING_AREA = { w: 1200, h: 700 }
+/** Rough speaking rate of the tutor voice, used to spread a beat's ink across its narration. */
+const SPOKEN_MS_PER_WORD = 330
+export const DIAGRAM_PACE = 1.8
 
 function wait(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -232,27 +238,33 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
   const diagramId = `${context.checkpointIndex}-${context.diagramIndex}`
   const existing = editor.getCurrentPageShapes()
     .filter(shape => shape.meta?.owner === 'agent' && shape.meta?.lessonId === context.lessonId && shape.meta?.diagramId === diagramId)
-  const generationCount = new Set(existing.map(shape => shape.meta?.generationId || 'legacy')).size
-  const xOffset = context.checkpointIndex * 2800 + 950 + generationCount * 1250
-  const yOffset = 220 + context.diagramIndex * 760
+  const boardStart = { x: context.checkpointIndex * 2400 + 1100, y: 220 }
 
   if (plan.actions.some(action => action._type === 'stroke' || action._type === 'text')) {
     const interruptedShape = existing.find(shape => shape.meta?.actionState === 'interrupted')
     const interruptedGeneration = interruptedShape?.meta?.generationId
     const generationId = typeof interruptedGeneration === 'string' ? interruptedGeneration : crypto.randomUUID()
-    const beatId = `diagram_${diagramId.replaceAll('-', '_')}_${generationId.replaceAll('-', '_')}`
-    return applyTeachingBeat(editor, {
-      beatId, context: 'Drawing a visual explanation.', speech: 'Drawing a visual explanation.', pauseMs: 0, waitForLearner: false,
-      placement: 'continue', anchorBeatId: '', actions: plan.actions as TeachingAction[],
-    }, {
-      lessonId: context.lessonId, checkpointIndex: context.checkpointIndex, signal: context.signal, onAction: context.onAction, onCursor: context.onCursor,
-      diagramId, generationId, origin: interruptedShape && typeof interruptedShape.meta?.originX === 'number' && typeof interruptedShape.meta?.originY === 'number'
-        ? { x: interruptedShape.meta.originX, y: interruptedShape.meta.originY } : { x: xOffset, y: yOffset },
-    })
+    const origin = interruptedShape && typeof interruptedShape.meta?.originX === 'number' && typeof interruptedShape.meta?.originY === 'number'
+      ? { x: interruptedShape.meta.originX, y: interruptedShape.meta.originY }
+      : clearBeatOrigin(editor, { actions: plan.actions.filter((action): action is Extract<TeachingAction, { _type: 'stroke' | 'text' }> => action._type === 'stroke' || action._type === 'text') }, boardStart, true)
+    for (let start = 0; start < plan.actions.length; start += 12) {
+      await applyTeachingBeat(editor, {
+        beatId: `diagram_${diagramId.replaceAll('-', '_')}_${generationId.replaceAll('-', '')}_${start}`,
+        context: 'Drawing a visual explanation.', speech: 'Drawing a visual explanation.', pauseMs: 0, waitForLearner: false,
+        placement: 'continue', anchorBeatId: '', actions: plan.actions.slice(start, start + 12) as TeachingAction[],
+      }, {
+        lessonId: context.lessonId, checkpointIndex: context.checkpointIndex, signal: context.signal, onAction: context.onAction, onCursor: context.onCursor,
+        diagramId, generationId, origin, pace: DIAGRAM_PACE,
+      })
+    }
+    return
   }
 
   const nodes = plan.actions.filter((action): action is Extract<DiagramAction, { _type: 'create' }> => action._type === 'create')
   const columns = context.diagramKind === 'comparison' ? 2 : ['flow', 'timeline'].includes(context.diagramKind) ? Math.min(4, nodes.length) : Math.min(3, Math.ceil(Math.sqrt(nodes.length)))
+  const { x: xOffset, y: yOffset } = clearBeatOrigin(editor, {
+    actions: [{ _type: 'stroke', id: 'area', atMs: 0, points: [{ x: 0, y: 0 }, { x: columns * 300, y: Math.ceil(nodes.length / columns) * 200 }], color: 'black', size: 'm', closed: false }],
+  }, boardStart, true)
   const created = new Map<string, { id: TLShapeId; point: AgentCursorPoint }>()
   const createdIds: TLShapeId[] = []
   let cursorPoint: AgentCursorPoint | null = null
@@ -306,7 +318,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
       createdIds.push(id)
       context.onAction?.(`Connected ${action.fromId} to ${action.toId}`)
     }
-    await wait(ACTION_DELAY_MS, context.signal)
+    await wait(ACTION_DELAY_MS * DIAGRAM_PACE * 2, context.signal)
   }
 
   if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
@@ -315,15 +327,57 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
   return createdIds
 }
 
+function beatMarkBounds(beat: Pick<TeachingBeat, 'actions'>) {
+  return beat.actions.flatMap(action => {
+    if (action._type === 'stroke') {
+      const xs = action.points.map(point => point.x), ys = action.points.map(point => point.y)
+      return [{ type: 'stroke', x: Math.min(...xs) - 12, y: Math.min(...ys) - 12, w: Math.max(...xs) - Math.min(...xs) + 24, h: Math.max(...ys) - Math.min(...ys) + 24 }]
+    }
+    if (action._type === 'text') {
+      const lines = action.text.split('\n'), font = { s: 20, m: 28, l: 36, xl: 48 }[action.size]
+      return [{ type: 'text', x: action.x - 8, y: action.y - 8, w: Math.max(...lines.map(line => line.length)) * font * 0.8 + 16, h: lines.length * font * 1.35 + 16 }]
+    }
+    return []
+  })
+}
+
+function clearBeatOrigin(editor: Editor, beat: Pick<TeachingBeat, 'actions'>, start: { x: number; y: number }, avoidAgent: boolean) {
+  const marks = beatMarkBounds(beat)
+  if (!marks.length) return start
+  const occupied = editor.getCurrentPageShapes().flatMap(shape => {
+    const bounds = editor.getShapePageBounds(shape)
+    return bounds ? [{ shape, bounds }] : []
+  })
+  let origin = { ...start }
+  for (let attempt = 0; attempt < occupied.length + 1; attempt++) {
+    let nextY = origin.y
+    for (const mark of marks) for (const { shape, bounds } of occupied) {
+      if (!avoidAgent && shape.meta?.owner === 'agent' && mark.type !== 'text') continue
+      if (origin.x + mark.x < bounds.x + bounds.w + 24 && origin.x + mark.x + mark.w > bounds.x - 24 &&
+          origin.y + mark.y < bounds.y + bounds.h + 24 && origin.y + mark.y + mark.h > bounds.y - 24) {
+        nextY = Math.max(nextY, bounds.y + bounds.h + 48 - mark.y)
+      }
+    }
+    if (nextY === origin.y) return origin
+    origin = { ...origin, y: nextY }
+  }
+  return origin
+}
+
 function beatOrigin(editor: Editor, beat: TeachingBeat, lessonId: string, checkpointIndex: number) {
   const shapes = editor.getCurrentPageShapes().filter(shape => shape.meta?.owner === 'agent' && shape.meta?.lessonId === lessonId && shape.meta?.checkpointId === String(checkpointIndex))
   const sameBeat = shapes.find(shape => shape.meta?.beatId === beat.beatId)
   if (sameBeat && typeof sameBeat.meta?.originX === 'number' && typeof sameBeat.meta?.originY === 'number') return { x: sameBeat.meta.originX, y: sameBeat.meta.originY }
   const anchor = beat.placement === 'revisit' && beat.anchorBeatId ? shapes.find(shape => shape.meta?.beatId === beat.anchorBeatId) : undefined
-  if (anchor && typeof anchor.meta?.originX === 'number' && typeof anchor.meta?.originY === 'number') return { x: anchor.meta.originX, y: anchor.meta.originY }
-  const beatIds = [...new Set(shapes.map(shape => shape.meta?.beatId).filter((id): id is string => typeof id === 'string'))]
-  const index = beatIds.length
-  return { x: checkpointIndex * 2800 + 2000, y: 220 + index * 760 }
+  if (anchor && typeof anchor.meta?.originX === 'number' && typeof anchor.meta?.originY === 'number') return clearBeatOrigin(editor, beat, { x: anchor.meta.originX, y: anchor.meta.originY }, false)
+  // "continue" keeps drawing in the latest area, so consecutive beats build one picture in shared coordinates.
+  if (beat.placement === 'continue') {
+    const latest = [...shapes].reverse().find(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number')
+    if (latest) return clearBeatOrigin(editor, beat, { x: latest.meta.originX as number, y: latest.meta.originY as number }, false)
+  }
+  const prior = shapes.filter(shape => !shape.meta?.diagramId).flatMap(shape => { const bounds = editor.getShapePageBounds(shape); return bounds ? [bounds.y + bounds.h] : [] })
+  const top = Math.min(0, ...beatMarkBounds(beat).map(mark => mark.y))
+  return clearBeatOrigin(editor, beat, { x: checkpointIndex * 2400 + 1100, y: prior.length ? Math.max(...prior) + 60 - top : 220 }, true)
 }
 
 function smoothStrokePoints(points: Array<{ x: number; y: number }>, closed: boolean) {
@@ -358,7 +412,10 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
   diagramId?: string
   generationId?: string
   origin?: { x: number; y: number }
+  /** Multiplier on stroke and lettering delays; defaults to BEAT_PACE. */
+  pace?: number
 }): Promise<TeachingExecutionState> {
+  const pace = context.pace ?? BEAT_PACE
   const beat = readTeachingBeat(input)
   const origin = context.origin || beatOrigin(editor, beat, context.lessonId, context.checkpointIndex)
   const startedAt = performance.now()
@@ -370,8 +427,23 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
     ...(context.diagramId ? { diagramId: context.diagramId } : {}), ...(context.generationId ? { generationId: context.generationId } : {}),
   })
 
+  // Bring the drawing area into view before the pen starts, so the learner watches the ink appear while the tutor speaks.
+  if (beat.actions.some(action => action._type === 'stroke' || action._type === 'text')) {
+    const area = { x: origin.x, y: origin.y, w: DRAWING_AREA.w, h: DRAWING_AREA.h }
+    const view = editor.getViewportPageBounds()
+    const visible = area.x >= view.minX && area.y >= view.minY && area.x + area.w <= view.maxX && area.y + area.h <= view.maxY
+    if (!visible) editor.zoomToBounds(area, { animation: { duration: 300 }, inset: 48 })
+  }
+
+  // Models tend to bunch cues into the first seconds; spread them over the spoken sentence so ink tracks the voice.
+  const spokenMs = beat.speech.trim().split(/\s+/).length * SPOKEN_MS_PER_WORD
+  const lastCue = Math.max(0, ...beat.actions.map(action => action.atMs))
+  const cueStretch = !context.diagramId && lastCue > 0 && lastCue < spokenMs * 0.75 ? (spokenMs * 0.75) / lastCue : 1
+  const visibleActions = beat.actions.filter(action => action._type === 'stroke' || action._type === 'text').length
+  const actionBudget = Math.max(180, spokenMs * 0.75 / Math.max(1, visibleActions))
+
   for (const action of beat.actions) {
-    const remainingCue = action.atMs - (performance.now() - startedAt)
+    const remainingCue = action.atMs * cueStretch - (performance.now() - startedAt)
     if (remainingCue > 0) await wait(remainingCue, context.signal)
     if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
     if (action._type === 'remove') {
@@ -439,19 +511,21 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       if (!existing) {
         progress = Math.min(2, action.points.length)
         editor.createShape({
-          id, type: 'draw', x: origin.x, y: origin.y, meta: metaFor(action, 'interrupted', progress),
-          props: { color: action.color, fill: 'none', dash: 'draw', size: action.size, segments: compressLegacySegments([{ type: 'free', points: strokePoints() }]), isComplete: false, isClosed: action.closed, isPen: true, scale: 1, scaleX: 1, scaleY: 1 },
+          id, type: 'draw', x: origin.x, y: origin.y, meta: metaFor(action, progress === action.points.length ? 'complete' : 'interrupted', progress),
+          props: { color: action.color, fill: 'none', dash: 'draw', size: action.size, segments: compressLegacySegments([{ type: 'free', points: strokePoints() }]), isComplete: progress === action.points.length, isClosed: action.closed, isPen: true, scale: 1, scaleX: 1, scaleY: 1 },
         } as any)
       }
       try {
+        const frameMs = 16 * pace
+        const step = context.diagramId ? 1 : Math.max(1, Math.ceil(action.points.length / Math.max(1, actionBudget / frameMs)))
         while (progress < action.points.length) {
           if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
-          progress = Math.min(action.points.length, progress + 1)
+          progress = Math.min(action.points.length, progress + step)
           const point = action.points[progress - 1]
           cursorPoint = { x: origin.x + point.x, y: origin.y + point.y }
           context.onCursor?.(cursorPoint)
           editor.updateShape({ id, type: 'draw', meta: metaFor(action, progress === action.points.length ? 'complete' : 'interrupted', progress), props: { segments: compressLegacySegments([{ type: 'free', points: strokePoints() }]), isComplete: progress === action.points.length } } as any)
-          await wait(16, context.signal)
+          await wait(frameMs, context.signal)
         }
       } catch (error) {
         editor.updateShape({ id, type: 'draw', meta: metaFor(action, 'interrupted', progress) } as any)
@@ -467,13 +541,15 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
         editor.createShape({ id, type: 'text', x: origin.x + action.x, y: origin.y + action.y, meta: metaFor(action, 'interrupted', 0), props: { richText: toRichText(''), color: action.color, size: action.size, font: 'draw', autoSize: true } } as any)
       }
       try {
+        const frameMs = 22 * pace
+        const step = context.diagramId ? 1 : Math.max(2, Math.ceil(action.text.length / Math.max(1, actionBudget / frameMs)))
         while (progress < action.text.length) {
           if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
-          progress = Math.min(action.text.length, progress + 3)
+          progress = Math.min(action.text.length, progress + step)
           cursorPoint = { x: textPoint.x + Math.min(progress * 3, 420), y: textPoint.y }
           context.onCursor?.(cursorPoint)
           editor.updateShape({ id, type: 'text', meta: metaFor(action, progress === action.text.length ? 'complete' : 'interrupted', progress), props: { richText: toRichText(action.text.slice(0, progress)) } } as any)
-          await wait(22, context.signal)
+          await wait(frameMs, context.signal)
         }
       } catch (error) {
         editor.updateShape({ id, type: 'text', meta: metaFor(action, 'interrupted', progress) } as any)
@@ -484,8 +560,6 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
     completedIds.push(id)
   }
 
-  const bounds = editor.getShapesPageBounds(completedIds)
-  if (bounds) editor.zoomToBounds(bounds, { animation: { duration: 250 }, inset: 96 })
   return getTeachingExecutionState(editor, context.lessonId, beat.beatId)
 }
 
@@ -503,6 +577,42 @@ export function getTeachingExecutionState(editor: Editor, lessonId: string, beat
     }
   }
   return { beatId, actions: [...actions.values()] }
+}
+
+/** A bounded spatial readout for the tutor's next drawing decision. Coordinates match its 1200 x 700 beat area. */
+export function getWhiteboardContext(editor: Editor, lessonId: string, checkpointIndex: number) {
+  const shapes = editor.getCurrentPageShapes()
+  const own = shapes.filter(shape => shape.meta?.owner === 'agent' && shape.meta?.lessonId === lessonId && shape.meta?.checkpointId === String(checkpointIndex) && !shape.meta?.diagramId)
+  const latest = [...own].reverse().find(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number')
+  if (!latest) return 'No tutor marks yet. Start with placement new-section.'
+  const origin = { x: latest.meta.originX as number, y: latest.meta.originY as number }
+  const inArea = (shape: (typeof shapes)[number]) => {
+    const bounds = editor.getShapePageBounds(shape)
+    return bounds && bounds.x < origin.x + DRAWING_AREA.w && bounds.x + bounds.w > origin.x && bounds.y < origin.y + DRAWING_AREA.h && bounds.y + bounds.h > origin.y
+  }
+  const mark = (shape: (typeof shapes)[number]) => {
+    const bounds = editor.getShapePageBounds(shape)!
+    return {
+      beatId: shape.meta?.beatId || undefined,
+      actionId: shape.meta?.actionId || undefined,
+      type: shape.type,
+      text: (editor.getShapeUtil(shape).getText(shape as any) || '').slice(0, 80),
+      x: Math.round(bounds.x - origin.x), y: Math.round(bounds.y - origin.y),
+      w: Math.round(bounds.w), h: Math.round(bounds.h),
+      state: shape.meta?.actionState || undefined,
+    }
+  }
+  const tutor = own.filter(shape => shape.meta?.originX === origin.x && shape.meta?.originY === origin.y && inArea(shape)).slice(-32).map(mark)
+  const learner = shapes.filter(shape => !shape.meta?.owner && ['draw', 'text', 'arrow', 'highlight'].includes(shape.type) && inArea(shape)).slice(-8).map(mark)
+  const seen = new Set([`${origin.x},${origin.y}`])
+  const nearby = own.filter(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number').reverse().flatMap(shape => {
+    const key = `${shape.meta?.originX},${shape.meta?.originY}`
+    if (seen.has(key)) return []
+    seen.add(key)
+    return [{ anchorBeatId: shape.meta?.beatId, dx: (shape.meta?.originX as number) - origin.x, dy: (shape.meta?.originY as number) - origin.y,
+      labels: own.filter(item => item.meta?.originX === shape.meta?.originX && item.meta?.originY === shape.meta?.originY && item.type === 'text').slice(0, 3).map(item => (editor.getShapeUtil(item).getText(item as any) || '').slice(0, 60)) }]
+  }).slice(0, 3)
+  return JSON.stringify({ area: 'Latest tutor section; local coordinates 0..1200 x 0..700', tutor, learner, nearby })
 }
 
 export function getSelectionContext(editor: Editor): SelectionContext | null {

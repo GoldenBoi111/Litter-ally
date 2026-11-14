@@ -8,7 +8,7 @@ $logPath = Join-Path $runtime 'voice-rtc.log'
 if (-not (Test-Path $python)) { throw 'Run .\scripts\setup-voice.ps1 first.' }
 $envPath = Join-Path $root '.env'
 if (Test-Path $envPath) {
-  $settings = @('LOCAL_STT_MODEL', 'LOCAL_TTS_URL', 'LOCAL_TTS_MODEL', 'LOCAL_TTS_VOICE', 'VOICE_RTC_BIND', 'VOICE_RTC_PORT', 'VOICE_RTC_ALLOWED_ORIGINS', 'VOICE_RTC_DIAGNOSTICS', 'VOICE_RTC_STUN_URL')
+  $settings = @('LOCAL_STT_PROVIDER', 'LOCAL_STT_MODEL', 'LOCAL_TTS_URL', 'LOCAL_TTS_MODEL', 'LOCAL_TTS_VOICE', 'VOICE_RTC_BIND', 'VOICE_RTC_PORT', 'VOICE_RTC_ALLOWED_ORIGINS', 'VOICE_RTC_DIAGNOSTICS', 'VOICE_RTC_STUN_URL')
   foreach ($line in Get-Content $envPath) {
     if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$' -and $settings -contains $Matches[1]) {
       $value = $Matches[2].Trim().Trim('"').Trim("'")

@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { IndexCard } from './components/ui/index-card'
-import { LogoMark } from './Logo'
+import { Landing } from './Landing'
 import { SIGNED_OUT_EVENT, api, importBrowserLibrary } from './storage'
 import App from './App'
 
@@ -10,7 +10,7 @@ export type User = { id: string; email: string; name: string }
 type Mode = 'sign-in' | 'register'
 
 function AuthScreen({ onSignedIn }: { onSignedIn: (user: User) => void }) {
-  const [mode, setMode] = useState<Mode>('sign-in')
+  const [mode, setMode] = useState<Mode>('register')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -32,11 +32,11 @@ function AuthScreen({ onSignedIn }: { onSignedIn: (user: User) => void }) {
   }
 
   const registering = mode === 'register'
+
   return (
-    <main className="auth-desk">
-      <IndexCard seed="auth" className="auth-card max-w-none">
-        <div className="auth-brand"><LogoMark size={40} /><h1>Litter-ally</h1></div>
-        <p className="auth-lede">{registering ? 'Create an account to keep your sources and boards on this computer.' : 'Sign in to open your board.'}</p>
+    <Landing onSignIn={() => { setMode('sign-in'); setError('') }}>
+      <IndexCard id="auth-form" seed="auth" className="auth-card max-w-none">
+        <h2 className="ls-form-title">{registering ? 'Create your account' : 'Sign in'}</h2>
         <form onSubmit={submit} className="auth-form">
           {registering && <label>Name<Input name="name" autoComplete="name" maxLength={80} /></label>}
           <label>Email<Input name="email" type="email" autoComplete="email" required /></label>
@@ -50,7 +50,7 @@ function AuthScreen({ onSignedIn }: { onSignedIn: (user: User) => void }) {
           <button type="button" onClick={() => { setMode(registering ? 'sign-in' : 'register'); setError('') }}>{registering ? 'Sign in' : 'Create an account'}</button>
         </p>
       </IndexCard>
-    </main>
+    </Landing>
   )
 }
 
@@ -83,5 +83,5 @@ export function AuthGate() {
 
   if (user === undefined) return <main className="auth-desk" aria-busy="true" />
   if (!user) return <AuthScreen onSignedIn={next => void signedIn(next)} />
-  return <App key={user.id} user={user} onSignOut={() => void signOut()} notice={notice} />
+  return <App key={user.id} user={user} onUserUpdated={setUser} onSignOut={() => void signOut()} notice={notice} />
 }
