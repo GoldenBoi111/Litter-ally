@@ -72,6 +72,8 @@ export class HybridTutor {
   private browserVoice = false
   private recognition: { start(): void; stop(): void; abort(): void; onresult: ((e: any) => void) | null; onerror: ((e: any) => void) | null; onend: (() => void) | null; lang: string; interimResults: boolean; continuous: boolean } | null = null
   private recognized = ''
+  /** Set when the learner cut the tutor off to ask something: answer, then pick the lesson back up. */
+  private resumeAfterAnswer = false
 
   constructor(private callbacks: TutorCallbacks, private preparedAudioContext?: AudioContext, options: { streaming?: boolean; bargeIn?: boolean; rtcUrl?: string; iceServers?: RTCIceServer[] } = {}) {
     this.streaming = options.streaming !== false
@@ -219,6 +221,7 @@ export class HybridTutor {
     }
     const request = ++this.pushToTalkRequest
     this.micMuted = false
+    this.cutInForLearner()
     try {
       await this.vad?.start()
       if (this.closed || this.paused || this.micMuted) {
@@ -247,6 +250,15 @@ export class HybridTutor {
     void this.respond()
   }
 
+  /** Pressing to talk stops the tutor immediately (not after voice detection kicks in). */
+  private cutInForLearner() {
+    if (!this.isBusy() && !this.currentBeat) return
+    this.interruptedForInput = true
+    this.resumeAfterAnswer = true
+    this.interrupt()
+    this.sendControl({ type: 'speech.cancel' })
+  }
+
   private setBrowserMic(muted: boolean) {
     this.micMuted = muted
     if (muted) {
@@ -255,8 +267,7 @@ export class HybridTutor {
     }
     const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!Ctor) { this.micMuted = true; this.callbacks.onStatus('error', 'This browser has no speech recognition. Type your question instead.'); return false }
-    this.interruptedForInput = this.isBusy()
-    if (this.interruptedForInput) this.interrupt()
+    this.cutInForLearner()
     const recognition = new Ctor()
     recognition.lang = 'en-US'
     recognition.interimResults = false
@@ -347,6 +358,7 @@ export class HybridTutor {
   private continueAfterUnrecognizedInterruption() {
     if (!canContinueAfterUnrecognizedInterruption(this.interruptedForInput, this.closed, this.paused)) return
     this.interruptedForInput = false
+    this.resumeAfterAnswer = false
     this.appendInterruptedState()
     this.input.push({ type: 'message', role: 'user', content: 'The interruption was not understood. Continue the lesson from the current canvas state, briefly rephrasing any cut-off explanation.' })
     void this.respond()
@@ -483,7 +495,10 @@ export class HybridTutor {
     this.appendInterruptedState()
     this.transcripts = [...this.transcripts, { role: 'You' as const, text }].slice(-8)
     this.callbacks.onTranscript(this.transcripts)
-    this.input.push({ type: 'message', role: 'user', content: text })
+    if (this.resumeAfterAnswer) {
+      this.resumeAfterAnswer = false
+      this.input.push({ type: 'message', role: 'user', content: `${text}\n\n(I cut you off mid-explanation to say this. Answer me directly and briefly first. Then say a short bridge like "Back to where we were" and continue the lesson from exactly where you stopped, finishing the interrupted explanation and its drawing by reusing the same beatId.)` })
+    } else this.input.push({ type: 'message', role: 'user', content: text })
     if (this.isBusy()) this.pendingResponse = true
     else void this.respond()
   }
