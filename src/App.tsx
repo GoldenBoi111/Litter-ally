@@ -7,11 +7,12 @@ import 'tldraw/tldraw.css'
 import { deletePaper as deletePaperRecord, deletePaperCanvas, latestConceptEvidence, listPapers, loadKnowledgeGraph, loadLearningProfile, mergeTaughtKnowledge, paperCanvasPersistenceKey, readApiJson, recordPlanKnowledge, saveLearningOutcome, saveLearningPlan, savePaper, type ImportedPaper, type LearningEvidence } from './storage'
 import { readPaperEvidence, readPaperPage } from './paper-text.mjs'
 import { applyDiagramPlan, applyTeachingBeat, buildCheckpointBrief, formatCheckpointBrief, getSelectionContext, getTeachingExecutionState, requestDiagramPlan, type DiagramBrief, type TeachingBeat, type TeachingPlan } from './lessonAgent'
-import { assessAnswer, extractTaughtKnowledge, requestAdaptivePlan, requestAdaptiveRevision, requestLearningDiagnostic, requestPracticeQuestion, defaultLearningGoal, type AnswerReview, type LearningDiagnostic } from './learning'
+import { assessAnswer, extractTaughtKnowledge, requestAdaptivePlan, requestAdaptiveRevision, requestPracticeQuestion, defaultLearningGoal, type AnswerReview, type LearningDiagnostic } from './learning'
 import { finishPdfExtraction, type PdfExtraction } from './pdfImport'
 import { importImageSource, importMediaSource, importTextSource } from './sourceImport'
 import { placeSourceImage } from './sourceImage'
 import { LessonDock } from './LessonDock'
+import { PaperLoader } from './PaperLoader'
 import { Board } from './board/Board'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectOverview } from './pages/ProjectOverview'
@@ -19,6 +20,7 @@ import './pages/pages.css'
 import { COMPARE_GOAL, DEEP_GOAL, loadProjects, markSourcesReviewed, newProject, projectBoardKey, projectSynthesisKey, saveProjects, summarizeSource, synthesizeProject, type Project } from './projects'
 import { PersistentTldraw } from './persistentCanvas'
 import { Wordmark } from './Logo'
+import { AccountSettings } from './AccountSettings'
 import type { User } from './AuthGate'
 import type { HybridTutor, TutorCallbacks, TutorStatus } from './hybridTutor'
 
@@ -121,13 +123,15 @@ function initializePaperCanvas(editor: Editor, paper: ImportedPaper) {
   if (bounds) editor.zoomToBounds(bounds, { targetZoom: 1, animation: { duration: 0 } })
 }
 
-export default function App({ user, onSignOut, notice }: { user: User; onSignOut: () => void; notice?: string }) {
+export default function App({ user, onUserUpdated, onSignOut, notice }: { user: User; onUserUpdated: (user: User) => void; onSignOut: () => void; notice?: string }) {
   const editorRef = useRef<Editor | null>(null)
   const modalRef = useRef<HTMLDialogElement>(null)
   const planRef = useRef<TeachingPlan | null>(null)
   const checkpointIndexRef = useRef(0)
   const tutorRef = useRef<HybridTutor | null>(null)
   const drawAbortRef = useRef<AbortController | null>(null)
+  /** Diagrams draw in the background while beats run, so they get their own abort handle. */
+  const diagramAbortRef = useRef<AbortController | null>(null)
   const agentCursorRef = useRef<HTMLDivElement>(null)
   const agentCursorHideRef = useRef<number | undefined>(undefined)
   const learningBusyRef = useRef(false)
@@ -139,6 +143,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   const [addOpen, setAddOpen] = useState(false)
   type View = 'projects' | 'overview' | 'board' | 'lesson'
   const [view, setView] = useState<View>('projects')
+  const [accountOpen, setAccountOpen] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const projectsRef = useRef(projects)
   projectsRef.current = projects
@@ -306,7 +311,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     setDiagnostic(null)
     if (currentId) localStorage.setItem(CURRENT_PAPER_KEY, currentId)
     else localStorage.removeItem(CURRENT_PAPER_KEY)
-    drawAbortRef.current?.abort()
+    drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
     tutorRef.current?.close()
     tutorRef.current = null
     const saved = papers.find(paper => paper.id === currentId)?.lessonState
@@ -349,7 +354,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   useEffect(() => {
     const pauseWhenHidden = () => {
       if (document.hidden && tutorRef.current) {
-        drawAbortRef.current?.abort()
+        drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
         tutorRef.current.pause()
         setTutorDetail('Paused while this tab is hidden. Return here and press Resume to continue.')
       }
@@ -359,7 +364,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   }, [])
 
   useEffect(() => () => {
-    drawAbortRef.current?.abort()
+    drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
     tutorRef.current?.close()
     selectionCleanupRef.current?.()
   }, [])
@@ -404,7 +409,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   const removePaper = useCallback(async (paper: ImportedPaper) => {
     if (!window.confirm(`Remove "${paper.title}" and its saved canvas from this device?`)) return
     if (paper.id === currentId) {
-      drawAbortRef.current?.abort()
+      drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
       tutorRef.current?.close()
       tutorRef.current = null
     } else if (selectedSourceIds.includes(paper.id)) {
@@ -532,10 +537,9 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     const checkpoint = activePlan.sessions[index]
     if (!checkpoint) return 'That checkpoint does not exist.'
 
-    drawAbortRef.current?.abort()
+    diagramAbortRef.current?.abort()
     const controller = new AbortController()
-    drawAbortRef.current = controller
-    setTutorStatus('drawing')
+    diagramAbortRef.current = controller
     try {
       const preparedDiagram = checkpoint.diagrams[diagramIndex]
       const customRequest = request.trim().slice(0, 600)
@@ -597,7 +601,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     const source = papers.find(paper => paper.id === segment?.sourceId) || currentPaper
     const sourceSegmentIndex = segment ? (source.sourceSegments || []).findIndex(item => item.id === segment.id) : pageNumber - 1
     if (source.sourceKind === 'image' && source.sourceData) {
-      drawAbortRef.current?.abort()
+      drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
       const controller = new AbortController()
       drawAbortRef.current = controller
       return placeSourceImage(editor, source.sourceData, source.id, source.title, checkpointIndexRef.current, controller.signal)
@@ -607,7 +611,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
       const sourceLocator = segment?.locator
       const frameSeconds = sourceLocator?.kind === 'time-range' ? sourceLocator.frameSeconds : undefined
       const frame = sourceFrames.reduce((closest, candidate) => Math.abs(candidate.timeSeconds - (frameSeconds || 0)) < Math.abs(closest.timeSeconds - (frameSeconds || 0)) ? candidate : closest)
-      drawAbortRef.current?.abort()
+      drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
       const controller = new AbortController()
       drawAbortRef.current = controller
       return placeSourceImage(editor, frame.data, source.id, `${source.title} · ${Math.round(frame.timeSeconds)} seconds`, checkpointIndexRef.current, controller.signal, `frame-${pageNumber}`)
@@ -619,7 +623,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
       const { image } = await readApiJson<{ image: { mimeType: string; data: string } | null }>(fetch('/api/ingest/office/slide-image', { method: 'POST', body: form }), 'The PowerPoint importer')
       if (image) {
         const bytes = Uint8Array.from(atob(image.data), char => char.charCodeAt(0))
-        drawAbortRef.current?.abort()
+        drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
         const controller = new AbortController()
         drawAbortRef.current = controller
         return placeSourceImage(editor, new Blob([bytes], { type: image.mimeType }), source.id, `${source.title} · slide ${sourceSegmentIndex + 1}`, checkpointIndexRef.current, controller.signal, `slide-${sourceSegmentIndex + 1}`)
@@ -629,7 +633,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
       message: 'This source has no saved visual preview. I can continue from its extracted text.',
       pageText: readPaperPage(currentPaper.text, pageNumber, currentPaper.pageCount),
     }
-    drawAbortRef.current?.abort()
+    drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
     const controller = new AbortController()
     drawAbortRef.current = controller
     const { placePdfPage } = await import('./pdfPages')
@@ -646,7 +650,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     if (!activePlan) return 'No lesson is ready.'
     const delta = direction === 'next' ? 1 : -1
     const next = Math.max(0, Math.min(activePlan.sessions.length - 1, checkpointIndexRef.current + delta))
-    drawAbortRef.current?.abort()
+    drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
     checkpointIndexRef.current = next
     setCheckpointIndex(next)
     await persistLessonState(activePlan, next)
@@ -658,7 +662,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     const activePlan = planRef.current
     if (!activePlan) return
     const next = Math.max(0, Math.min(activePlan.sessions.length - 1, index))
-    drawAbortRef.current?.abort()
+    drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
     checkpointIndexRef.current = next
     checkpointTranscriptStartRef.current = transcriptRef.current.length
     setCheckpointIndex(next)
@@ -701,7 +705,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
           if (detail !== undefined) setTutorDetail(detail)
         },
         onTranscript: lines => { transcriptRef.current = lines; setTranscript(lines) },
-        onInterrupt: () => drawAbortRef.current?.abort(),
+        onInterrupt: () => { drawAbortRef.current?.abort(); diagramAbortRef.current?.abort() },
       }
       const tutor = new HybridTutor(callbacks, voiceAudioContext, { streaming: voiceConfig.streaming !== false, bargeIn: voiceConfig.bargeIn !== false, rtcUrl: voiceConfig.rtcUrl, iceServers: voiceConfig.iceServers })
       tutorRef.current = tutor
@@ -718,7 +722,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   }, [currentPaper, drawDiagram, knowledgeGraph, learnerEvidence, moveCheckpoint, presentTeachingBeat, readSourcePage, showSourcePage])
 
   const pauseTutor = useCallback(() => {
-    drawAbortRef.current?.abort()
+    drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
     tutorRef.current?.pause()
     setTutorMicMuted(true)
     setTutorDetail('Lesson paused. Your canvas and checkpoint are saved.')
@@ -750,7 +754,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   }, [currentPaper, knowledgeGraph, learnerEvidence, startTutor])
 
   const stopTutor = useCallback(() => {
-    drawAbortRef.current?.abort()
+    drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
     tutorRef.current?.close()
     tutorRef.current = null
     setTutorMicMuted(true)
@@ -823,30 +827,20 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     setPlanBusy(true)
     setError('')
     setDiagnostic(null)
-    setStatus(paper.sourceKind === 'topic' ? 'The teaching agent is planning your lesson...' : 'The teaching agent is preparing a few diagnostic questions...')
+    setStatus('The teaching agent is planning your lesson...')
     try {
       const learningGoal = paper.sourceKind === 'topic'
-        ? `Understand ${paper.title} end to end, including its foundations, key ideas, evidence, and implications.`
+        ? `Understand what ${paper.title} is and how it works: its core ideas and mechanics, without tangents.`
         : goal?.trim() || defaultLearningGoal
-      if (paper.sourceKind === 'topic') {
-        const nextPlan = await requestAdaptivePlan({
-          paperTitle: paper.title, sourceKind: paper.sourceKind, pageCount: paper.pageCount, text: paper.text,
-          diagnostic: { goal: learningGoal, questions: [] }, answers: [],
-          knowledge: learnerKnowledge.slice(0, 100), evidence: learnerEvidence.slice(-20),
-          priorKnowledge: { propositions: knowledgeGraph.propositions?.slice(-100).map(({ id, concept, statement }) => ({ id, concept, statement })) || [], reasoningLinks: knowledgeGraph.reasoningLinks?.slice(-200).map(({ source, target, relationType, reason }) => ({ source, target, relationType, reason })) || [] },
-        })
-        await storeTeachingPlan(paper, nextPlan)
-        return
-      }
-      const result = await requestLearningDiagnostic({
-        paperTitle: paper.title, sourceKind: paper.sourceKind, learningGoal, pageCount: paper.pageCount, text: paper.text,
-        knowledge: learnerKnowledge.slice(0, 100),
-        evidence: learnerEvidence.slice(-20),
+      // No diagnostic quiz: plan straight from the source and the learner's goal.
+      const nextPlan = await requestAdaptivePlan({
+        paperTitle: paper.title, sourceKind: paper.sourceKind, pageCount: paper.pageCount, text: paper.text,
+        diagnostic: { goal: learningGoal, questions: [] }, answers: [],
+        knowledge: learnerKnowledge.slice(0, 100), evidence: learnerEvidence.slice(-20),
         priorKnowledge: { propositions: knowledgeGraph.propositions?.slice(-100).map(({ id, concept, statement }) => ({ id, concept, statement })) || [], reasoningLinks: knowledgeGraph.reasoningLinks?.slice(-200).map(({ source, target, relationType, reason }) => ({ source, target, relationType, reason })) || [] },
       })
       if (currentId !== paper.id) return
-      setDiagnostic(result)
-      setStatus('Answer these short questions so the plan can start from what you understand. You can leave anything blank.')
+      await storeTeachingPlan(paper, nextPlan)
     } catch (reason) {
       if (currentId !== paper.id) return
       const message = errorMessage(reason)
@@ -905,10 +899,6 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject, view, papers])
 
-  useEffect(() => {
-    if (diagnostic && !planBusy) void completeTeachingPlanRef.current?.(diagnostic.questions.map(() => ''))
-  }, [diagnostic, planBusy])
-  const completeTeachingPlanRef = useRef<((answers: string[]) => Promise<void>) | null>(null)
 
   const completeTeachingPlan = useCallback(async (answers: string[]) => {
     if (!currentPaper || !diagnostic) return
@@ -936,7 +926,6 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
       setPlanBusy(false)
     }
   }, [currentPaper, currentId, diagnostic, knowledgeGraph, learnerKnowledge, learnerEvidence, storeTeachingPlan])
-  completeTeachingPlanRef.current = completeTeachingPlan
   const adaptTeachingPlan = useCallback(async (review: AnswerReview) => {
     const currentPlan = planRef.current
     if (!currentPaper || !currentPlan) return
@@ -1107,7 +1096,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
 
   // Kept for the quiz/selection features the old tutor panel exposed; not surfaced in the decluttered lesson view.
   // Same for source management in the lesson view (now handled from the project overview).
-  void [hasSelection, askAboutSelection, assessCheckpoint, startPractice, assessPracticeAnswer, removePaper, toggleLearningSource, deletingPaperId, learningBusy, lessonMode, returnView]
+  void [hasSelection, askAboutSelection, assessCheckpoint, startPractice, assessPracticeAnswer, removePaper, toggleLearningSource, deletingPaperId, learningBusy, lessonMode, returnView, completeTeachingPlan]
 
   return (
     <main className="app-shell">
@@ -1120,7 +1109,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
         </nav>
         <div className="top-actions">
           {view !== 'lesson' && <Button size="sm" onClick={openAdd}>Add material</Button>}
-          <Button size="sm" variant="ghost" title={`Signed in as ${user.email}`} onClick={onSignOut}>Sign out</Button>
+          <Button size="sm" variant="outline" title={`Signed in as ${user.email}`} onClick={() => setAccountOpen(true)}>Account</Button>
         </div>
       </header>
 
@@ -1158,10 +1147,12 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
               <span>Tutor</span>
             </div>
             {dragging && <div className="canvas-drop-cover" aria-hidden="true"><span>Drop to import</span></div>}
+            {planBusy && <PaperLoader label="Planning your lesson…" />}
+            {!planBusy && tutorStatus === 'connecting' && <PaperLoader compact label="Getting ready…" />}
             {currentPaper && <LessonDock
               plan={plan} planBusy={planBusy} checkpointIndex={checkpointIndex} status={tutorStatus} detail={tutorDetail || error}
               micMuted={tutorMicMuted} transcript={transcript}
-              onBuild={() => void generateTeachingPlan()} onStart={() => void startTutor()} onPause={pauseTutor} onResume={resumeTutor} onStop={stopTutor}
+              onBuild={() => void generateTeachingPlan()} onAsk={question => askTutor(question)} onStart={() => void startTutor()} onPause={pauseTutor} onResume={resumeTutor} onStop={stopTutor}
               onSelectCheckpoint={selectCheckpoint} onTalkStart={startTutorPushToTalk} onTalkEnd={endTutorPushToTalk}
             />}
           </div>
@@ -1174,6 +1165,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
         <div className="dialog-head"><h2>Add material</h2><button className="dialog-close" onClick={() => setAddOpen(false)} aria-label="Close import dialog">x</button></div>
         <IntakePanel busy={busy} progress={progress} error={error} onFiles={files => void importFiles(files)} onUrl={url => void importUrl(url)} onTopic={topic => void createTopicLesson(topic)} />
       </dialog>
+      {accountOpen && <AccountSettings user={user} onUserUpdated={onUserUpdated} onSignOut={onSignOut} onClose={() => setAccountOpen(false)} />}
       <div className="status-live" role="status">{status}</div>
     </main>
   )
