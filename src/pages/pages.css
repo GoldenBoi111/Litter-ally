@@ -24,6 +24,7 @@
 .card-grid .desk-card { min-height: 170px; display: flex; flex-direction: column; gap: 6px; transition: transform 160ms cubic-bezier(.23,1,.32,1), box-shadow 160ms ease; }
 .card-grid .desk-card:hover { transform: translateY(-3px) rotate(0deg) !important; box-shadow: 0 10px 22px rgb(0 0 0 / .1); }
 .card-grid .desk-card:nth-child(3n+2) { background: var(--desk-card-warm, #fff9e6); }
+.card-grid .process-card { background: var(--desk-card-warm, #fff9e6); border-top: 5px solid var(--desk-indigo, #3b4a8c); }
 .card-hit { position: absolute; inset: 0; border: 0; background: transparent; cursor: pointer; border-radius: inherit; z-index: 1; }
 .card-hit:focus-visible { outline: 2px dashed var(--desk-indigo, #3b4a8c); outline-offset: 4px; }
 .card-delete {
