@@ -1,0 +1,100 @@
+{
+  "recordedAt": "2026-11-10T21:42:00-05:00",
+  "hardware": {
+    "os": "Microsoft Windows 11 Home 10.0.26200 (64-bit)",
+    "cpu": "AMD Ryzen 9 8945HS, 8 cores / 16 logical processors",
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU, 8188 MiB dedicated VRAM",
+    "driver": "621.14",
+    "cudaUmd": "13.5"
+  },
+  "breeze": {
+    "runtime": "Breeze-TTS-2.cpp v0.1.7",
+    "runtimeCommit": "4110a9fff4e47d4d1ba850d92d81f3ba86bf39c6",
+    "backend": "Vulkan",
+    "model": "HoppouAI/Breeze-TTS-2.cpp breeze-tts-2-q8_0.gguf",
+    "modelRevision": "e4fae6493ffb8bbeacc402d1b36f18dfa18fc8d5",
+    "modelSha256": "a02bcc4b69b0601032727f8040c4942149b1b73aa0f69022fe5aaa6a8f0ef879",
+    "quantization": "Q8_0 with standard higher-precision depth decoder",
+    "seed": 42,
+    "cfgScale": 3.0,
+    "shaderColdStart": {
+      "timeToFirstAudioSeconds": 30.055,
+      "note": "First-ever 1.28-second warm-up; Vulkan pipeline cache generation dominated."
+    },
+    "warmShortRequest": {
+      "wallSeconds": 9.604,
+      "audioSeconds": 1.28,
+      "timeToFirstAudioSeconds": 0.527
+    },
+    "finalRequest": {
+      "wallSecondsIncludingLoad": 307.947,
+      "estimatedLoadAndProcessOverheadSeconds": 10.593,
+      "steadyInferenceStageSeconds": 297.354,
+      "runtimeReportedTimeToFirstAudioSeconds": 10.292,
+      "audioSeconds": 64.24,
+      "realTimeFactorWallOverAudio": 4.793,
+      "audioSecondsPerWallSecond": 0.209,
+      "gpuBaselineMiB": 867,
+      "gpuPeakTotalMiB": 5636,
+      "gpuPeakDeltaMiB": 4769,
+      "processCpuSeconds": 355.172,
+      "averageCpuPercentOfMachine": 7.21,
+      "peakHostWorkingSetMiB": 658.6
+    },
+    "output": {
+      "path": "outputs/breeze_teacher.wav",
+      "sha256": "fc779287e9e553d9d45b1eac3854afeadd71cd1004503f535a7d65a3a9752a08",
+      "sampleRateHz": 24000,
+      "channels": 1,
+      "pcmBits": 16,
+      "peakDbfs": -6.486,
+      "clippedSamples": 0
+    }
+  },
+  "qwen": {
+    "runtime": "audio.cpp v0.9.4",
+    "runtimeCommit": "f7ac446fb75e594a6913c846bea6c85b637f6ac0",
+    "backend": "CUDA 13.3 with cuda_perf preset",
+    "model": "Qwen3-TTS-12Hz-1.7B-CustomVoice Q8_0 GGUF",
+    "modelRevision": "73ce4162f6cce370dd533c6782b772135c1b2a8e",
+    "modelSha256": "c8ac3f94b6e73f137c0e7ecc9270bc8faec7a476ff799b87e48844d1d0987ac3",
+    "quantization": "Q8_0 with speaker-sensitive tensors retained at higher precision",
+    "speaker": "Aiden",
+    "seed": 42,
+    "finalRequest": {
+      "modelLoadAndProcessOverheadSeconds": 22.784,
+      "steadyInferenceSeconds": 27.736,
+      "wallSecondsIncludingLoad": 50.52,
+      "audioSeconds": 69.12,
+      "realTimeFactorInferenceOverAudio": 0.401,
+      "audioSecondsPerInferenceSecond": 2.492,
+      "realTimeFactorEndToEnd": 0.731,
+      "audioSecondsPerEndToEndSecond": 1.368,
+      "gpuBaselineMiB": 946,
+      "gpuPeakTotalMiB": 5052,
+      "gpuPeakDeltaMiB": 4106,
+      "processCpuSeconds": 30.016,
+      "averageCpuPercentOfMachine": 4.86,
+      "peakHostWorkingSetMiB": 3948.6
+    },
+    "warmedStreamingProbe": {
+      "text": "Warm up the teaching voice.",
+      "timeToFirstAudioMilliseconds": 1493.83,
+      "totalRequestSeconds": 2.419
+    },
+    "output": {
+      "path": "outputs/qwen_teacher.wav",
+      "sha256": "83108f6dda3148229a06ce489af6810d0d385b3b4a83efaf06a6e5a13d7490de",
+      "sampleRateHz": 24000,
+      "channels": 1,
+      "pcmBits": 16,
+      "peakDbfs": -3.108,
+      "clippedSamples": 0
+    }
+  },
+  "validation": {
+    "asr": "faster-whisper base.en, CPU int8",
+    "result": "Both clips transcribed the complete passage with no dropped or repeated words; Breeze rendered backpropagation as two lexical words in ASR output.",
+    "subjectiveListening": "Not scored; final listening preference remains for the user."
+  }
+}
