@@ -137,7 +137,6 @@ export function formatCheckpointBrief(brief: CheckpointBrief) {
     checkpoint.backgroundNotes ? `External background only (do not attribute to the supplied material): ${checkpoint.backgroundNotes}${backgroundLines.length ? `\nReputable sources: ${backgroundLines.join('\n')}` : ''}` : '',
     `Available diagrams (zero-based indexes):\n${diagramLines.length ? diagramLines.join('\n') : 'No prepared diagrams; a learner-requested visual can still be created.'}`,
     `Walkthrough: ${checkpoint.narration}`,
-    `Check for understanding: ${checkpoint.checkForUnderstanding}`,
   ].join('\n')
 }
 
@@ -177,6 +176,14 @@ export type SelectionContext = {
 }
 
 const ACTION_DELAY_MS = 180
+/** Handwriting pace. Teaching beats draw a little slower than raw speed; full diagrams draw like a tutor at a whiteboard
+ * while the voice keeps talking (roughly 3x slower), so ink appears as it is being explained rather than all at once. */
+export const BEAT_PACE = 1.6
+/** Local coordinate space the model draws in for each beat (matches the server prompt). */
+const DRAWING_AREA = { w: 1200, h: 700 }
+/** Rough speaking rate of the tutor voice, used to spread a beat's ink across its narration. */
+const SPOKEN_MS_PER_WORD = 330
+export const DIAGRAM_PACE = 3
 
 function wait(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -249,7 +256,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
         placement: 'continue', anchorBeatId: '', actions: plan.actions.slice(start, start + 12) as TeachingAction[],
       }, {
         lessonId: context.lessonId, checkpointIndex: context.checkpointIndex, signal: context.signal, onAction: context.onAction, onCursor: context.onCursor,
-        diagramId, generationId, origin,
+        diagramId, generationId, origin, pace: DIAGRAM_PACE,
       })
     }
     return
@@ -310,7 +317,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
       createdIds.push(id)
       context.onAction?.(`Connected ${action.fromId} to ${action.toId}`)
     }
-    await wait(ACTION_DELAY_MS, context.signal)
+    await wait(ACTION_DELAY_MS * DIAGRAM_PACE * 2, context.signal)
   }
 
   if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
@@ -325,9 +332,13 @@ function beatOrigin(editor: Editor, beat: TeachingBeat, lessonId: string, checkp
   if (sameBeat && typeof sameBeat.meta?.originX === 'number' && typeof sameBeat.meta?.originY === 'number') return { x: sameBeat.meta.originX, y: sameBeat.meta.originY }
   const anchor = beat.placement === 'revisit' && beat.anchorBeatId ? shapes.find(shape => shape.meta?.beatId === beat.anchorBeatId) : undefined
   if (anchor && typeof anchor.meta?.originX === 'number' && typeof anchor.meta?.originY === 'number') return { x: anchor.meta.originX, y: anchor.meta.originY }
-  const beatIds = [...new Set(shapes.map(shape => shape.meta?.beatId).filter((id): id is string => typeof id === 'string'))]
-  const index = beatIds.length
-  return { x: checkpointIndex * 2800 + 2000, y: 220 + index * 760 }
+  // "continue" keeps drawing in the latest area, so consecutive beats build one picture in shared coordinates.
+  if (beat.placement === 'continue') {
+    const latest = [...shapes].reverse().find(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number')
+    if (latest) return { x: latest.meta.originX as number, y: latest.meta.originY as number }
+  }
+  const sections = new Set(shapes.filter(shape => !shape.meta?.diagramId && typeof shape.meta?.originY === 'number').map(shape => `${shape.meta.originX},${shape.meta.originY}`))
+  return { x: checkpointIndex * 2800 + 2000, y: 220 + sections.size * 760 }
 }
 
 function smoothStrokePoints(points: Array<{ x: number; y: number }>, closed: boolean) {
@@ -362,7 +373,10 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
   diagramId?: string
   generationId?: string
   origin?: { x: number; y: number }
+  /** Multiplier on stroke and lettering delays; defaults to BEAT_PACE. */
+  pace?: number
 }): Promise<TeachingExecutionState> {
+  const pace = context.pace ?? BEAT_PACE
   const beat = readTeachingBeat(input)
   const origin = context.origin || beatOrigin(editor, beat, context.lessonId, context.checkpointIndex)
   const startedAt = performance.now()
@@ -374,8 +388,21 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
     ...(context.diagramId ? { diagramId: context.diagramId } : {}), ...(context.generationId ? { generationId: context.generationId } : {}),
   })
 
+  // Bring the drawing area into view before the pen starts, so the learner watches the ink appear while the tutor speaks.
+  if (beat.actions.some(action => action._type === 'stroke' || action._type === 'text')) {
+    const area = { x: origin.x, y: origin.y, w: DRAWING_AREA.w, h: DRAWING_AREA.h }
+    const view = editor.getViewportPageBounds()
+    const visible = area.x >= view.minX && area.y >= view.minY && area.x + area.w <= view.maxX && area.y + area.h <= view.maxY
+    if (!visible) editor.zoomToBounds(area, { animation: { duration: 300 }, inset: 48 })
+  }
+
+  // Models tend to bunch cues into the first seconds; spread them over the spoken sentence so ink tracks the voice.
+  const spokenMs = beat.speech.trim().split(/\s+/).length * SPOKEN_MS_PER_WORD
+  const lastCue = Math.max(0, ...beat.actions.map(action => action.atMs))
+  const cueStretch = !context.diagramId && lastCue > 0 && lastCue < spokenMs * 0.75 ? (spokenMs * 0.75) / lastCue : 1
+
   for (const action of beat.actions) {
-    const remainingCue = action.atMs - (performance.now() - startedAt)
+    const remainingCue = action.atMs * cueStretch - (performance.now() - startedAt)
     if (remainingCue > 0) await wait(remainingCue, context.signal)
     if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
     if (action._type === 'remove') {
@@ -455,7 +482,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
           cursorPoint = { x: origin.x + point.x, y: origin.y + point.y }
           context.onCursor?.(cursorPoint)
           editor.updateShape({ id, type: 'draw', meta: metaFor(action, progress === action.points.length ? 'complete' : 'interrupted', progress), props: { segments: compressLegacySegments([{ type: 'free', points: strokePoints() }]), isComplete: progress === action.points.length } } as any)
-          await wait(16, context.signal)
+          await wait(16 * pace, context.signal)
         }
       } catch (error) {
         editor.updateShape({ id, type: 'draw', meta: metaFor(action, 'interrupted', progress) } as any)
@@ -473,11 +500,11 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       try {
         while (progress < action.text.length) {
           if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
-          progress = Math.min(action.text.length, progress + 3)
+          progress = Math.min(action.text.length, progress + (pace > 2 ? 1 : 2))
           cursorPoint = { x: textPoint.x + Math.min(progress * 3, 420), y: textPoint.y }
           context.onCursor?.(cursorPoint)
           editor.updateShape({ id, type: 'text', meta: metaFor(action, progress === action.text.length ? 'complete' : 'interrupted', progress), props: { richText: toRichText(action.text.slice(0, progress)) } } as any)
-          await wait(22, context.signal)
+          await wait(22 * pace, context.signal)
         }
       } catch (error) {
         editor.updateShape({ id, type: 'text', meta: metaFor(action, 'interrupted', progress) } as any)
@@ -488,8 +515,6 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
     completedIds.push(id)
   }
 
-  const bounds = editor.getShapesPageBounds(completedIds)
-  if (bounds) editor.zoomToBounds(bounds, { animation: { duration: 250 }, inset: 96 })
   return getTeachingExecutionState(editor, context.lessonId, beat.beatId)
 }
 
