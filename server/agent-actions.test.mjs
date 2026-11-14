@@ -76,3 +76,25 @@ test('rejects unsafe, unbounded, and duplicate teaching actions', () => {
   assert.throws(() => validateTeachingBeat({ ...validBeat, actions: [{ _type: 'remove', id: 'erase', atMs: 0, targetId: '../user-shape' }] }), /invalid revision target/)
   assert.throws(() => validateTeachingBeat({ ...validBeat, speech: 'x'.repeat(601) }), /invalid teaching beat/)
 })
+
+const widgetBeat = widget => ({ beatId: 'data', context: 'Show the figures.', speech: 'Here are the numbers from the study.', pauseMs: 0, waitForLearner: true, placement: 'new-section', anchorBeatId: '', actions: [{ _type: 'widget', id: 'chart', atMs: 0, x: 40, y: 40, w: 520, h: 320, title: 'Results', labels: [], series: [], rows: [], unit: '', ...widget }] })
+
+test('accepts every widget kind filled in its documented shape', () => {
+  for (const widget of [
+    { kind: 'table', labels: ['Model', 'Score'], rows: [['A', '91'], ['B', '84']] },
+    { kind: 'bar', labels: ['2019', '2020', '2021'], series: [{ name: 'Sales', values: [3, 5, 4] }, { name: 'Costs', values: [2, 2, 3] }] },
+    { kind: 'line', labels: ['Mon', 'Tue'], series: [{ name: 'Temp', values: [-2, 4.5] }], unit: '°' },
+    { kind: 'pie', labels: ['Yes', 'No'], series: [{ name: 'Votes', values: [60, 40] }] },
+    { kind: 'stats', labels: ['Accuracy'], series: [{ name: 'Figures', values: [97.3] }], unit: '%' },
+    { kind: 'timeline', rows: [['1905', 'Special relativity'], ['1915', 'General relativity']] },
+  ]) assert.doesNotThrow(() => validateTeachingBeat(widgetBeat(widget)), widget.kind)
+})
+
+test('rejects widgets whose data does not match their kind or leaves the drawing area', () => {
+  assert.throws(() => validateTeachingBeat(widgetBeat({ kind: 'bar', labels: ['a', 'b'], series: [{ name: 's', values: [1] }] })), /bar widget/)
+  assert.throws(() => validateTeachingBeat(widgetBeat({ kind: 'table', labels: ['a', 'b'], rows: [['only one']] })), /table widget/)
+  assert.throws(() => validateTeachingBeat(widgetBeat({ kind: 'pie', labels: ['a', 'b'], series: [{ name: 's', values: [0, 0] }] })), /pie widget/)
+  assert.throws(() => validateTeachingBeat(widgetBeat({ kind: 'timeline', rows: [['1905', 'one', 'extra'], ['1915', 'two']] })), /timeline widget/)
+  assert.throws(() => validateTeachingBeat(widgetBeat({ kind: 'table', labels: ['a'], rows: [['x']], x: 900 })), /table widget/)
+  assert.throws(() => validateTeachingBeat(widgetBeat({ kind: 'chart', labels: ['a'] })), /chart widget/)
+})

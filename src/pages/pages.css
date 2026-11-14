@@ -24,6 +24,12 @@
 .card-grid .desk-card { min-height: 170px; display: flex; flex-direction: column; gap: 6px; transition: transform 160ms cubic-bezier(.23,1,.32,1), box-shadow 160ms ease; }
 .card-grid .desk-card:hover { transform: translateY(-3px) rotate(0deg) !important; box-shadow: 0 10px 22px rgb(0 0 0 / .1); }
 .card-grid .desk-card:nth-child(3n+2) { background: var(--desk-card-warm, #fff9e6); }
+.card-grid .desk-card.process-card.process-card {
+  /* Process guides are sticky notes: square, flat yellow, gummed strip at the top, no ruled card look. */
+  background: var(--ll-sticky-yellow, #f7e38a); border-color: color-mix(in srgb, var(--ll-sticky-yellow, #f7e38a) 70%, #8a6d1f);
+  border-radius: 2px; box-shadow: 0 1px 1px rgb(0 0 0 / .08), 0 10px 14px -8px rgb(60 45 10 / .35);
+  background-image: linear-gradient(to bottom, rgb(0 0 0 / .05), transparent 22px);
+}
 .card-hit { position: absolute; inset: 0; border: 0; background: transparent; cursor: pointer; border-radius: inherit; z-index: 1; }
 .card-hit:focus-visible { outline: 2px dashed var(--desk-indigo, #3b4a8c); outline-offset: 4px; }
 .card-delete {
@@ -35,7 +41,7 @@
 .desk-card .muted { color: #78716c; }
 .desk-card .tidbit { margin: 0; font: 14px/1.5 var(--font-family-body); }
 .desk-card .kind {
-  align-self: flex-start; font: 600 10px var(--font-mono); letter-spacing: .06em; padding: 2px 7px;
+  align-self: flex-start; flex-shrink: 0; white-space: nowrap; font: 600 10px/1.4 var(--font-mono); letter-spacing: .06em; padding: 3px 8px;
   background: var(--desk-highlight, #fef08a); border: 1.5px solid var(--desk-stroke, #2d2d2a); border-radius: 3px 6px 3px 5px;
 }
 .review-check { align-self: flex-start; font: 600 11px var(--font-family-body); color: #315c40; }
