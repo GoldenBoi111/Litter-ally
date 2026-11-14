@@ -780,7 +780,14 @@ export class HybridTutor {
       output = this.callbacks.readSourcePage(Number(args.pageNumber))
     } else if (name === 'draw_lesson_diagram' && Number.isInteger(args.diagramIndex)) {
       const request = typeof args.request === 'string' ? args.request.trim().slice(0, 600) : ''
-      output = await this.callbacks.drawDiagram(Number(args.diagramIndex), request)
+      // Don't block the voice on diagram planning + drawing: start it and let the tutor keep talking while ink appears.
+      const turn = this.turnId
+      void this.callbacks.drawDiagram(Number(args.diagramIndex), request).then(result => {
+        if (turn === this.turnId && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: ${result})` })
+      }).catch(error => {
+        if (turn === this.turnId && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: the diagram failed: ${error instanceof Error ? error.message : 'unknown error'}. Continue without it.)` })
+      })
+      output = 'The diagram has started drawing on the board and will appear stroke by stroke over the next half minute. Do not wait for it: start explaining right now with present_teaching_beat, walking through the idea in the order it is being drawn, and do not call draw_lesson_diagram again for it.'
     } else if (name === 'move_checkpoint' && (args.direction === 'next' || args.direction === 'previous')) {
       output = await this.callbacks.moveCheckpoint(args.direction)
     } else if (name === 'inspect_canvas_selection' && typeof args.question === 'string') {
