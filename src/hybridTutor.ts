@@ -806,6 +806,18 @@ export class HybridTutor {
       const result = await this.callbacks.showSourcePage(Number(args.pageNumber))
       output = result.pageText ? `${result.message}\n${result.pageText}` : result.message
       if (result.imageUrl) context = { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'The requested source location is shown on the canvas. Inspect it as evidence for the explanation.' }, { type: 'input_image', image_url: result.imageUrl }] }
+    } else if (name === 'look_up_outside_definition' && typeof args.term === 'string') {
+      this.callbacks.onStatus('connecting', `Looking up "${args.term}" in outside sources…`)
+      try {
+        const response = await fetch('/api/background/lookup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ term: args.term, context: typeof args.context === 'string' ? args.context : '' }) })
+        await checkApiResponse(response, 'Outside lookup')
+        const { results } = await response.json() as { results: Array<{ title: string; url: string; excerpt: string }> }
+        output = results.length
+          ? `Outside sources for "${args.term}" (not from the learner's material; name the source when you use it):\n\n${results.map(item => `${item.title}\n${item.url}\n${item.excerpt}`).join('\n\n')}`
+          : `No reputable outside source was found for "${args.term}". Say the material does not define it and give a short plain explanation labeled as general background.`
+      } catch (error) {
+        output = `The outside lookup failed (${error instanceof Error ? error.message : 'unknown error'}). Say the material does not define it and give a short plain explanation labeled as general background.`
+      }
     } else if (name === 'read_source_segment' && Number.isInteger(args.pageNumber)) {
       output = this.callbacks.readSourcePage(Number(args.pageNumber))
     } else if (name === 'draw_lesson_diagram' && Number.isInteger(args.diagramIndex)) {
