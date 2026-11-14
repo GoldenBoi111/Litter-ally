@@ -16,7 +16,11 @@ import { Board } from './board/Board'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectOverview } from './pages/ProjectOverview'
 import './pages/pages.css'
+<<<<<<< Updated upstream
 import { COMPARE_GOAL, DEEP_GOAL, loadProjects, newProject, projectBoardKey, saveProjects, summarizeSource, type Project } from './projects'
+=======
+import { COMPARE_GOAL, DEEP_GOAL, loadProjects, markSourcesReviewed, newProject, projectBoardKey, projectSynthesisKey, saveProjects, summarizeSource, synthesizeProject, type Project } from './projects'
+>>>>>>> Stashed changes
 import { PersistentTldraw } from './persistentCanvas'
 import { Wordmark } from './Logo'
 import type { User } from './AuthGate'
@@ -139,6 +143,10 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   const [addOpen, setAddOpen] = useState(false)
   type View = 'projects' | 'overview' | 'board' | 'lesson'
   const [view, setView] = useState<View>('projects')
+<<<<<<< Updated upstream
+=======
+  const boardOpen = view !== 'lesson'
+>>>>>>> Stashed changes
   const [projects, setProjects] = useState<Project[]>([])
   const projectsRef = useRef(projects)
   projectsRef.current = projects
@@ -184,12 +192,20 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   const openLesson = (sourceId: string) => enterLesson(sourceId, [], null, { kind: 'source', label: '' })
   const openCompare = (a: string, b: string) => enterLesson(a, [b], COMPARE_GOAL(titleOf(a), titleOf(b)), { kind: 'compare', label: 'Connection' })
   const projectSources = activeProject ? activeProject.sourceIds.map(id => papers.find(p => p.id === id)).filter((p): p is ImportedPaper => Boolean(p)) : []
+<<<<<<< Updated upstream
+=======
+  const projectSummaries = useMemo(() => Object.fromEntries(Object.entries(activeProject?.summaries || {}).map(([id, s]) => [id, s.summary || s.tidbit])), [activeProject])
+>>>>>>> Stashed changes
   const openDeep = () => {
     if (!activeProject || !projectSources.length) return
     const [first, ...rest] = projectSources.map(p => p.id)
     enterLesson(first, rest, DEEP_GOAL(activeProject.name), { kind: 'deep', label: 'Deep dive' })
   }
+<<<<<<< Updated upstream
   const projectSummaries = useMemo(() => Object.fromEntries(Object.entries(activeProject?.summaries || {}).map(([id, s]) => [id, s.tidbit])), [activeProject])
+=======
+  const [stylePanelOpen, setStylePanelOpen] = useState(false)
+>>>>>>> Stashed changes
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
@@ -887,12 +903,31 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
       setPendingSummaries(prev => new Set(prev).add(paper.id))
       summarizeSource(paper)
         .then(summary => updateProjects(list => list.map(p => p.id === projectId ? { ...p, summaries: { ...p.summaries, [paper.id]: summary } } : p)))
+<<<<<<< Updated upstream
         .catch(() => { /* leave it unsummarised; the card still works */ })
+=======
+        .catch(reason => { summaryRequested.current.delete(paper.id); setStatus(errorMessage(reason)) })
+>>>>>>> Stashed changes
         .finally(() => setPendingSummaries(prev => { const next = new Set(prev); next.delete(paper.id); return next }))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject, view, papers])
 
+<<<<<<< Updated upstream
+=======
+  const synthesisRequested = useRef(new Set<string>())
+  useEffect(() => {
+    if (!activeProject || (view !== 'overview' && view !== 'board') || activeProject.sourceIds.length < 2 || !activeProject.sourceIds.every(id => activeProject.summaries[id])) return
+    const key = projectSynthesisKey(activeProject)
+    if (activeProject.synthesisFor === key || synthesisRequested.current.has(key)) return
+    synthesisRequested.current.add(key)
+    synthesizeProject(activeProject, projectSources)
+      .then(synthesis => updateProjects(list => list.map(project => project.id === activeProject.id && projectSynthesisKey(project) === key ? { ...project, synthesis, synthesisFor: key } : project)))
+      .catch(reason => { synthesisRequested.current.delete(key); setStatus(errorMessage(reason)) })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject, view, papers])
+
+>>>>>>> Stashed changes
   useEffect(() => {
     if (diagnostic && !planBusy) void completeTeachingPlanRef.current?.(diagnostic.questions.map(() => ''))
   }, [diagnostic, planBusy])
@@ -1040,9 +1075,15 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
         setStatus('Your answer was saved, but the proposition graph could not be updated from this lesson yet.')
       }
     }
+    if (review.status === 'clear' && checkpointIndex === (planRef.current?.sessions.length || 0) - 1) {
+      const projectId = activeProjectIdRef.current
+      const completedIds = lessonMode.kind === 'deep' ? projectsRef.current.find(project => project.id === projectId)?.sourceIds || []
+        : lessonMode.kind === 'source' ? [currentPaper.id] : []
+      if (projectId && completedIds.length) updateProjects(list => list.map(project => project.id === projectId ? markSourcesReviewed(project, completedIds) : project))
+    }
     if (review.status !== 'clear') await adaptTeachingPlan(review)
     return review
-  }), [currentPaper, currentId, persistLearningReview, runLearningOperation, adaptTeachingPlan])
+  }), [currentPaper, currentId, persistLearningReview, runLearningOperation, adaptTeachingPlan, lessonMode, updateProjects])
 
   const startPractice = useCallback((checkpoint: { title: string; goal: string; concepts: string[]; sourcePages: number[] }) => runLearningOperation(async () => {
     if (!currentPaper) throw new Error('No source is selected.')
@@ -1088,8 +1129,12 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   }, [refreshKnowledgeGraph])
 
   // Kept for the quiz/selection features the old tutor panel exposed; not surfaced in the decluttered lesson view.
+<<<<<<< Updated upstream
   // Same for source management in the lesson view (now handled from the project overview).
   void [hasSelection, askAboutSelection, assessCheckpoint, startPractice, assessPracticeAnswer, removePaper, toggleLearningSource, deletingPaperId, learningBusy, lessonMode, returnView]
+=======
+  void [hasSelection, askAboutSelection, assessCheckpoint, startPractice, assessPracticeAnswer]
+>>>>>>> Stashed changes
 
   return (
     <main className="app-shell">
@@ -1101,12 +1146,35 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
           {view === 'lesson' && currentPaper && <><span className="crumb-sep" aria-hidden="true">/</span><span className="crumb-current" aria-current="page">{currentPaper.title}</span></>}
         </nav>
         <div className="top-actions">
+<<<<<<< Updated upstream
           {view !== 'lesson' && <Button size="sm" onClick={openAdd}>Add material</Button>}
           <Button size="sm" variant="ghost" title={`Signed in as ${user.email}`} onClick={onSignOut}>Sign out</Button>
+=======
+          {view === 'lesson' && <Button size="sm" variant="ghost" onClick={() => setView(activeProject ? returnView : 'projects')}>{returnView === 'board' ? 'Back to board' : 'Back to project'}</Button>}
+          {view === 'overview' && <Button size="sm" variant="ghost" onClick={() => setView('board')}>Board</Button>}
+          {view === 'board' && <Button size="sm" variant="ghost" onClick={() => setView('overview')}>Overview</Button>}
+          <Button size="sm" onClick={openAdd}>Add material</Button>
+          <span className="account" title={user.email}>{user.name}</span>
+          <Button size="sm" variant="ghost" onClick={onSignOut}>Sign out</Button>
+          {!boardOpen && <><HStack className="style-toggle"><IconButton label={stylePanelOpen ? 'Hide style controls' : 'Show style controls'} tooltip="Style controls" icon="Aa" size="sm" variant={stylePanelOpen ? 'primary' : 'ghost'} aria-expanded={stylePanelOpen} onClick={() => setStylePanelOpen(open => !open)} /></HStack>
+          <Button className="icon-button" size="icon-sm" variant="ghost" title="Undo" aria-label="Undo" onClick={() => editorRef.current?.undo()}>↶</Button>
+          <Button className="icon-button" size="icon-sm" variant="ghost" title="Redo" aria-label="Redo" onClick={() => editorRef.current?.redo()}>↷</Button></>}
+>>>>>>> Stashed changes
         </div>
       </header>
 
       <div className="workspace">
+<<<<<<< Updated upstream
+=======
+        {view === 'lesson' && <aside className="left-rail library-rail">
+          <div className="library-heading"><h2>Sources</h2><span>{papers.length || 'None yet'}</span></div>
+          <div className="rail-divider" />
+          {(activeProject ? projectSources : papers).length ? <div className="paper-list">{(activeProject ? projectSources : papers).map((paper, index) => <HStack key={paper.id} gap={1} vAlign="center" style={{ animationDelay: `${index * 30}ms` }} className={`paper-list-item ${!boardOpen && paper.id === currentId ? 'selected' : ''}`}><button className="paper-list-select" onClick={() => openLesson(paper.id)}><span className="pdf-badge">{(paper.sourceKind || 'pdf').toUpperCase()}</span><span className="paper-list-copy"><b>{paper.title}</b><small>{paper.pageCount} segments - {new Date(paper.importedAt).toLocaleDateString()}</small></span></button><Button className="paper-remove" aria-label={`Remove ${paper.title}`} title="Remove source" variant="ghost" size="icon-xs" disabled={deletingPaperId === paper.id} onClick={() => void removePaper(paper)}>x</Button></HStack>)}</div> : null}
+
+          {!boardOpen && currentPaper && papers.length > 1 && <section className="lesson-source-picker"><p className="section-eyebrow">Sources for next lesson</p><HStack gap={1} wrap="wrap">{papers.filter(paper => paper.id !== currentId).map(paper => <Button key={paper.id} size="sm" disabled={planBusy || learningBusy} variant={selectedSourceIds.includes(paper.id) ? "default" : "outline"} aria-pressed={selectedSourceIds.includes(paper.id)} onClick={() => toggleLearningSource(paper.id)}>{selectedSourceIds.includes(paper.id) ? "Included: " : "Include: "}{paper.title}</Button>)}</HStack></section>}
+        </aside>}
+
+>>>>>>> Stashed changes
         <section className="canvas-column">
           {view === 'projects' ? <ProjectsPage
             projects={projects}
@@ -1126,6 +1194,18 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
             onDetach={id => updateProjects(list => list.map(p => p.id === activeProject.id ? { ...p, sourceIds: p.sourceIds.filter(s => s !== id) } : p))}
           /> : view === 'board' && activeProject ? (libraryReady && <Board key={activeProject.id} canvasKey={projectBoardKey(activeProject.id)} papers={projectSources} summaries={projectSummaries} onOpen={openLesson} onCompare={openCompare} onAdd={openAdd} />)
           : view !== 'lesson' ? <ProjectsPage projects={projects} onOpen={id => { setActiveProjectId(id); setView('overview') }} onCreate={(name, description) => { const p = newProject(name, description); updateProjects(list => [p, ...list]); setActiveProjectId(p.id); setView('overview') }} onDelete={() => {}} /> : <>
+<<<<<<< Updated upstream
+=======
+          {currentPaper && (
+            <div className="canvas-toolbar">
+              <div className="canvas-title"><span className="canvas-dot" /><span>{currentPaper.title}</span>{lessonMode.label && <span className="lesson-mode">{lessonMode.label}</span>}<span className="canvas-count">? {currentPaper.pageCount} segments</span></div>
+              <div className="canvas-tools">
+                <IconButton label="Fit canvas to view" tooltip="Fit canvas" size="sm" variant="secondary" icon="Fit" onClick={() => editorRef.current?.zoomToFit({ animation: { duration: 350 } })} />
+                <Button size="sm" disabled={planBusy || learningBusy} onClick={() => void generateTeachingPlan()}>{planBusy ? 'Building plan...' : plan ? 'Rebuild teaching plan' : 'Build teaching plan'}</Button>
+              </div>
+            </div>
+          )}
+>>>>>>> Stashed changes
           <div className={`canvas-area ${dragging ? 'canvas-dragging' : ''}`} onDragEnter={event => { event.preventDefault(); setDragging(true) }} onDragOver={event => event.preventDefault()} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false) }} onDrop={onCanvasDrop}>
             {libraryReady && <PersistentTldraw key={currentPaper?.id || 'blank'} components={paperCanvasComponents} canvasKey={currentPaper ? paperCanvasPersistenceKey(currentPaper.id) : 'margin-paper-v2-empty'} onMount={editor => {
               selectionCleanupRef.current?.()
