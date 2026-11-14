@@ -15,3 +15,6 @@ data/
 
 # Reproducible benchmark audio
 tts-benchmark/outputs/*.wav
+
+# Mac local voice environment
+.voice-mac/
