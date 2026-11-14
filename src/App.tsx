@@ -7,7 +7,7 @@ import 'tldraw/tldraw.css'
 import { deletePaper as deletePaperRecord, deletePaperCanvas, latestConceptEvidence, listPapers, loadKnowledgeGraph, loadLearningProfile, mergeTaughtKnowledge, paperCanvasPersistenceKey, readApiJson, recordPlanKnowledge, saveLearningOutcome, saveLearningPlan, savePaper, type ImportedPaper, type LearningEvidence } from './storage'
 import { readPaperEvidence, readPaperPage } from './paper-text.mjs'
 import { applyDiagramPlan, applyTeachingBeat, buildCheckpointBrief, formatCheckpointBrief, getSelectionContext, getTeachingExecutionState, requestDiagramPlan, type DiagramBrief, type TeachingBeat, type TeachingPlan } from './lessonAgent'
-import { assessAnswer, extractTaughtKnowledge, requestAdaptivePlan, requestAdaptiveRevision, requestLearningDiagnostic, requestPracticeQuestion, defaultLearningGoal, type AnswerReview, type LearningDiagnostic } from './learning'
+import { assessAnswer, extractTaughtKnowledge, requestAdaptivePlan, requestAdaptiveRevision, requestPracticeQuestion, defaultLearningGoal, type AnswerReview, type LearningDiagnostic } from './learning'
 import { finishPdfExtraction, type PdfExtraction } from './pdfImport'
 import { importImageSource, importMediaSource, importTextSource } from './sourceImport'
 import { placeSourceImage } from './sourceImage'
@@ -823,30 +823,20 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     setPlanBusy(true)
     setError('')
     setDiagnostic(null)
-    setStatus(paper.sourceKind === 'topic' ? 'The teaching agent is planning your lesson...' : 'The teaching agent is preparing a few diagnostic questions...')
+    setStatus('The teaching agent is planning your lesson...')
     try {
       const learningGoal = paper.sourceKind === 'topic'
-        ? `Understand ${paper.title} end to end, including its foundations, key ideas, evidence, and implications.`
+        ? `Understand what ${paper.title} is and how it works: its core ideas and mechanics, without tangents.`
         : goal?.trim() || defaultLearningGoal
-      if (paper.sourceKind === 'topic') {
-        const nextPlan = await requestAdaptivePlan({
-          paperTitle: paper.title, sourceKind: paper.sourceKind, pageCount: paper.pageCount, text: paper.text,
-          diagnostic: { goal: learningGoal, questions: [] }, answers: [],
-          knowledge: learnerKnowledge.slice(0, 100), evidence: learnerEvidence.slice(-20),
-          priorKnowledge: { propositions: knowledgeGraph.propositions?.slice(-100).map(({ id, concept, statement }) => ({ id, concept, statement })) || [], reasoningLinks: knowledgeGraph.reasoningLinks?.slice(-200).map(({ source, target, relationType, reason }) => ({ source, target, relationType, reason })) || [] },
-        })
-        await storeTeachingPlan(paper, nextPlan)
-        return
-      }
-      const result = await requestLearningDiagnostic({
-        paperTitle: paper.title, sourceKind: paper.sourceKind, learningGoal, pageCount: paper.pageCount, text: paper.text,
-        knowledge: learnerKnowledge.slice(0, 100),
-        evidence: learnerEvidence.slice(-20),
+      // No diagnostic quiz: plan straight from the source and the learner's goal.
+      const nextPlan = await requestAdaptivePlan({
+        paperTitle: paper.title, sourceKind: paper.sourceKind, pageCount: paper.pageCount, text: paper.text,
+        diagnostic: { goal: learningGoal, questions: [] }, answers: [],
+        knowledge: learnerKnowledge.slice(0, 100), evidence: learnerEvidence.slice(-20),
         priorKnowledge: { propositions: knowledgeGraph.propositions?.slice(-100).map(({ id, concept, statement }) => ({ id, concept, statement })) || [], reasoningLinks: knowledgeGraph.reasoningLinks?.slice(-200).map(({ source, target, relationType, reason }) => ({ source, target, relationType, reason })) || [] },
       })
       if (currentId !== paper.id) return
-      setDiagnostic(result)
-      setStatus('Answer these short questions so the plan can start from what you understand. You can leave anything blank.')
+      await storeTeachingPlan(paper, nextPlan)
     } catch (reason) {
       if (currentId !== paper.id) return
       const message = errorMessage(reason)
@@ -905,10 +895,6 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject, view, papers])
 
-  useEffect(() => {
-    if (diagnostic && !planBusy) void completeTeachingPlanRef.current?.(diagnostic.questions.map(() => ''))
-  }, [diagnostic, planBusy])
-  const completeTeachingPlanRef = useRef<((answers: string[]) => Promise<void>) | null>(null)
 
   const completeTeachingPlan = useCallback(async (answers: string[]) => {
     if (!currentPaper || !diagnostic) return
@@ -936,7 +922,6 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
       setPlanBusy(false)
     }
   }, [currentPaper, currentId, diagnostic, knowledgeGraph, learnerKnowledge, learnerEvidence, storeTeachingPlan])
-  completeTeachingPlanRef.current = completeTeachingPlan
   const adaptTeachingPlan = useCallback(async (review: AnswerReview) => {
     const currentPlan = planRef.current
     if (!currentPaper || !currentPlan) return
@@ -1107,7 +1092,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
 
   // Kept for the quiz/selection features the old tutor panel exposed; not surfaced in the decluttered lesson view.
   // Same for source management in the lesson view (now handled from the project overview).
-  void [hasSelection, askAboutSelection, assessCheckpoint, startPractice, assessPracticeAnswer, removePaper, toggleLearningSource, deletingPaperId, learningBusy, lessonMode, returnView]
+  void [hasSelection, askAboutSelection, assessCheckpoint, startPractice, assessPracticeAnswer, removePaper, toggleLearningSource, deletingPaperId, learningBusy, lessonMode, returnView, completeTeachingPlan]
 
   return (
     <main className="app-shell">
