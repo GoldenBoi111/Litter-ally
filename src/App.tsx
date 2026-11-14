@@ -19,6 +19,7 @@ import { Board } from './board/Board'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectOverview } from './pages/ProjectOverview'
 import './pages/pages.css'
+import { microphoneErrorMessage } from './micAccess'
 import { COMPARE_GOAL, DEEP_GOAL, loadProjects, newProject, projectBoardKey, projectSynthesisKey, saveProjects, summarizeSource, synthesizeProject, type Project, isCurrentSummary } from './projects'
 import { PersistentTldraw } from './persistentCanvas'
 import { lessonShapeUtils } from './lessonWidgets'
@@ -824,7 +825,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
       tutorRef.current?.close()
       tutorRef.current = null
       setTutorStatus('error')
-      setTutorDetail(/permission|microphone|notallowed/i.test(message) ? 'Microphone access was not granted. Allow it in the browser, then try again.' : message)
+      setTutorDetail(microphoneErrorMessage(reason) || message)
     }
   }, [currentPaper, drawDiagram, knowledgeGraph, learnerEvidence, moveCheckpoint, presentTeachingBeat, readSourcePage, showSourcePage])
 
@@ -1013,7 +1014,13 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     if (activeProject.synthesisFor === key || synthesisRequested.current.has(requestKey)) return
     synthesisRequested.current.add(requestKey)
     synthesizeProject(contentProject!, contentSources)
-      .then(synthesis => updateProjects(list => list.map(project => project.id === activeProject.id && projectSynthesisKey(project) === key ? { ...project, synthesis, synthesisFor: key } : project)))
+      .then(synthesis => updateProjects(list => list.map(project => {
+        if (project.id !== activeProject.id) return project
+        // The request covered content sources only, so compare against the same view of the project.
+        // Comparing the full list (with process guides) never matched and silently dropped every connection.
+        const contentOnly = { ...project, sourceIds: project.sourceIds.filter(id => papers.find(paper => paper.id === id)?.documentRole !== 'process') }
+        return projectSynthesisKey(contentOnly) === key ? { ...project, synthesis, synthesisFor: key } : project
+      })))
       .catch(reason => { synthesisRequested.current.delete(requestKey); setAnalysisError({ projectId: activeProject.id, message: errorMessage(reason) }) })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject, papers, analysisRetry])
@@ -1129,6 +1136,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
           {view === 'board' && <><span className="crumb-sep" aria-hidden="true">/</span><span className="crumb-current" aria-current="page">Board</span></>}
           {view === 'lesson' && currentPaper && <><span className="crumb-sep" aria-hidden="true">/</span><span className="crumb-current" aria-current="page">{currentPaper.title}</span></>}
         </nav>
+        {view === 'board' && <button className="deep-learn-top" onClick={openDeep} disabled={!contentSources.length} title={contentSources.length ? `Learn all ${contentSources.length} content ${contentSources.length === 1 ? 'source' : 'sources'} in this project, start to finish` : 'Add a content source to learn this project'}>Deep learn project</button>}
         <div className="top-actions">
           {view === 'board' && <Button size="sm" variant="outline" onClick={() => navigate('overview')}>Sources</Button>}
           {view === 'overview' && <Button size="sm" variant="outline" onClick={() => navigate('board')}>Board</Button>}
@@ -1164,7 +1172,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
             onHideConnection={pair => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: [...new Set([...(project.hiddenConnectionPairs || []), pair])] } : project))}
             onRestoreConnection={pair => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: (project.hiddenConnectionPairs || []).filter(item => item !== pair) } : project))}
             onRestoreHiddenConnections={() => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: [] } : project))}
-            onOpen={openLesson} onCompare={openCompare} onAdd={openAdd} onDeep={openDeep}
+            onOpen={openLesson} onCompare={openCompare} onAdd={openAdd}
             onChangeRole={changeDocumentRole}
           />)
           : view !== 'lesson' ? <ProjectsPage projects={projects} papers={papers} loading={!projectsLoaded || !libraryReady} onOpen={id => navigate('board', id)} onCreate={(name, description) => { const p = newProject(name, description); updateProjects(list => [p, ...list]); navigate('board', p.id) }} onDelete={project => { if (confirm(`Delete the project "${project.name}"? Its sources stay in your library.`)) updateProjects(list => list.filter(p => p.id !== project.id)) }} /> : <>
