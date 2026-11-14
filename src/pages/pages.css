@@ -142,3 +142,66 @@
 }
 .bar-grip:active { cursor: grabbing; color: var(--desk-stroke, #2d2d2a); }
 @media (max-width: 1100px) { .lesson-bar { flex-wrap: wrap; } }
+
+/* ---------- Waiting screen: paper uncrumples, then gets written on (unreadable). Loop = 7.5s. ---------- */
+.paper-loader {
+  position: absolute; inset: 0; z-index: 450; display: grid; place-content: center; justify-items: center; gap: 18px;
+  background: color-mix(in srgb, var(--desk-parchment, #f9f8f6) 82%, transparent); backdrop-filter: blur(2px);
+}
+.paper-loader.is-compact { inset: auto; right: 18px; top: 70px; gap: 6px; background: transparent; backdrop-filter: none; }
+.paper-loader.is-compact .paper-loader-stage { transform: scale(.38); transform-origin: top right; margin: 0 -136px -160px 0; }
+.paper-loader.is-compact .paper-loader-label { font-size: 13px; }
+.paper-loader-stage { position: relative; width: 220px; height: 260px; }
+.paper-loader-sheet {
+  position: absolute; inset: 0; background: var(--desk-card, #fffdf9);
+  filter: drop-shadow(0 8px 14px rgb(0 0 0 / .14));
+  animation: paper-uncrumple 7.5s cubic-bezier(.3,.7,.2,1) infinite;
+}
+.paper-loader-svg { width: 100%; height: 100%; display: block; }
+.paper-loader-rules line { stroke: #b9cfe6; stroke-width: 1; opacity: .7; }
+.paper-loader-rules .margin { stroke: #e9a3a0; }
+.paper-loader-creases path { fill: none; stroke: rgb(45 45 42 / .35); stroke-width: 1.2; animation: paper-creases 7.5s ease-out infinite; }
+.paper-loader-ink path {
+  fill: none; stroke: #2d3a6b; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+}
+.paper-loader-ink .l1 { animation: ink-l1 7.5s linear infinite; }
+.paper-loader-ink .l2 { animation: ink-l2 7.5s linear infinite; }
+.paper-loader-ink .l3 { animation: ink-l3 7.5s linear infinite; }
+.paper-loader-ink .l4 { animation: ink-l4 7.5s linear infinite; }
+.paper-loader-ink .l5 { animation: ink-l5 7.5s linear infinite; }
+.paper-loader-pencil { position: absolute; left: 0; top: 0; width: 40px; height: 40px; animation: pencil-write 7.5s linear infinite; }
+.paper-loader-pencil path { fill: #f2c94c; stroke: #2d2d2a; stroke-width: 1.6; stroke-linejoin: round; }
+.paper-loader-pencil .tip { fill: #2d2d2a; }
+.paper-loader-pencil .eraser { fill: #e9a3a0; }
+.paper-loader-label { margin: 0; font: 700 20px var(--font-script, cursive); color: var(--desk-stroke, #2d2d2a); }
+
+@keyframes paper-uncrumple {
+  0% { clip-path: polygon(18% 22%, 38% 8%, 61% 18%, 84% 10%, 78% 38%, 92% 62%, 80% 86%, 58% 78%, 36% 92%, 14% 80%, 24% 58%, 8% 36%); transform: scale(.55) rotate(-24deg); opacity: 0; }
+  5% { opacity: 1; }
+  12% { clip-path: polygon(8% 10%, 36% 4%, 64% 9%, 92% 4%, 90% 36%, 97% 64%, 90% 94%, 62% 90%, 34% 97%, 6% 92%, 10% 62%, 3% 34%); transform: scale(.85) rotate(-6deg); }
+  22%, 92% { clip-path: polygon(0% 0%, 33% 0%, 66% 0%, 100% 0%, 100% 33%, 100% 66%, 100% 100%, 66% 100%, 33% 100%, 0% 100%, 0% 66%, 0% 33%); transform: scale(1) rotate(-1.5deg); opacity: 1; }
+  100% { clip-path: polygon(0% 0%, 33% 0%, 66% 0%, 100% 0%, 100% 33%, 100% 66%, 100% 100%, 66% 100%, 33% 100%, 0% 100%, 0% 66%, 0% 33%); transform: scale(1) rotate(-1.5deg) translateY(-8px); opacity: 0; }
+}
+@keyframes paper-creases { 0%, 8% { opacity: 1; } 24%, 92% { opacity: .28; } 100% { opacity: 0; } }
+@keyframes ink-l1 { 0%, 26% { stroke-dashoffset: 1; opacity: 1; } 38%, 92% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+@keyframes ink-l2 { 0%, 39% { stroke-dashoffset: 1; opacity: 1; } 51%, 92% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+@keyframes ink-l3 { 0%, 52% { stroke-dashoffset: 1; opacity: 1; } 63%, 92% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+@keyframes ink-l4 { 0%, 64% { stroke-dashoffset: 1; opacity: 1; } 76%, 92% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+@keyframes ink-l5 { 0%, 77% { stroke-dashoffset: 1; opacity: 1; } 85%, 92% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+/* Pencil tip (bottom-left of its box) follows each line: x 28→end, y = line baseline. */
+@keyframes pencil-write {
+  0%, 20% { transform: translate(150px, 180px) rotate(8deg); opacity: 0; }
+  24% { transform: translate(24px, 44px); opacity: 1; }
+  26% { transform: translate(24px, 44px); }  38% { transform: translate(174px, 42px); }
+  39% { transform: translate(24px, 72px); }  51% { transform: translate(186px, 70px); }
+  52% { transform: translate(24px, 100px); } 63% { transform: translate(164px, 98px); }
+  64% { transform: translate(24px, 128px); } 76% { transform: translate(182px, 126px); }
+  77% { transform: translate(24px, 156px); } 85% { transform: translate(120px, 154px); }
+  90% { transform: translate(170px, 190px) rotate(10deg); opacity: 1; }
+  96%, 100% { transform: translate(200px, 220px) rotate(14deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .paper-loader-sheet, .paper-loader-creases path, .paper-loader-ink path, .paper-loader-pencil { animation: none !important; }
+  .paper-loader-ink path { stroke-dashoffset: 0; }
+}
