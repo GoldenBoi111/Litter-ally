@@ -7,6 +7,7 @@
 .page-head { display: grid; gap: 8px; margin-bottom: 28px; max-width: 760px; }
 .page-head h1 { margin: 0; font-family: var(--font-script); font-size: 40px; line-height: 1.1; font-weight: 700; }
 .page-head p { margin: 0; font-family: var(--font-family-body); font-size: 15px; color: #57534e; }
+.page-head .review-progress { font: 12px var(--font-mono); color: #57534e; }
 .page .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
 .page .empty { font-family: var(--font-script); font-size: 22px; color: #78716c; }
 
@@ -37,6 +38,7 @@
   align-self: flex-start; font: 600 10px var(--font-mono); letter-spacing: .06em; padding: 2px 7px;
   background: var(--desk-highlight, #fef08a); border: 1.5px solid var(--desk-stroke, #2d2d2a); border-radius: 3px 6px 3px 5px;
 }
+.review-check { align-self: flex-start; font: 600 11px var(--font-family-body); color: #315c40; }
 
 .new-project { max-width: 520px; display: grid; gap: 12px; margin-bottom: 30px; }
 .new-project label { display: grid; gap: 4px; font: 600 13px var(--font-family-body); }
@@ -58,10 +60,9 @@
 .crumbs .crumb-link { border: 0; background: transparent; cursor: pointer; font: inherit; color: inherit; padding: 0; }
 .crumbs .crumb-link:hover { text-decoration: underline; }
 
-/* Lesson dock + captions (replaces the tutor side panel). */
+/* Lesson dock (top centre, clear of tldraw's bottom toolbar), talk pill and captions. */
 .lesson-dock {
-  position: absolute; left: 50%; top: 14px; translate: -50% 0; z-index: 400;
-  display: flex; align-items: center; gap: 4px; padding: 5px 6px; max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: 4px; padding: 5px 6px;
   background: var(--desk-card, #fffdf9); border: 2px solid var(--desk-stroke, #2d2d2a);
   border-radius: 14px 6px 12px 5px / 6px 12px 5px 14px; box-shadow: 0 6px 18px rgb(0 0 0 / .12);
 }
@@ -71,17 +72,73 @@
 }
 .lesson-dock button:hover:not(:disabled) { background: rgb(0 0 0 / .06); }
 .lesson-dock button:disabled { opacity: .35; cursor: default; }
-.lesson-dock button[aria-pressed='true'], .lesson-dock button.is-on { background: var(--desk-highlight, #fef08a); }
+.lesson-dock button[aria-pressed='true'] { background: var(--desk-highlight, #fef08a); }
 .lesson-dock .dock-primary { background: var(--desk-stroke, #2d2d2a); color: var(--desk-card, #fffdf9); font-family: var(--font-script); font-size: 16px; padding: 0 16px; }
 .lesson-dock .dock-primary:hover:not(:disabled) { background: #000; }
 .dock-step { font: 13px var(--font-family-body); max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
 .dock-sep { width: 1px; height: 20px; background: rgb(0 0 0 / .15); margin: 0 4px; }
+
+/* Hold-Space-to-talk: the headline interaction. Sits above tldraw's toolbar on the right. */
+.talk-pill {
+  display: flex; align-items: center; gap: 12px; padding: 10px 18px 10px 10px;
+  background: var(--desk-stroke, #2d2d2a); color: #fffdf9; border: 0; cursor: pointer; user-select: none;
+  border-radius: 999px 28px 999px 32px / 32px 999px 28px 999px;
+  box-shadow: 0 10px 28px rgb(0 0 0 / .25), 0 0 0 0 rgb(254 240 138 / .0);
+  transition: transform 140ms cubic-bezier(.23,1,.32,1), box-shadow 220ms ease, background 220ms ease;
+  animation: talk-invite 2.6s ease-in-out infinite;
+}
+.talk-pill:hover { transform: translateY(-2px) rotate(-1deg); }
+.talk-pill.is-talking {
+  background: #b4534a; animation: none; transform: scale(1.04);
+  box-shadow: 0 10px 30px rgb(180 83 74 / .45), 0 0 0 8px rgb(252 165 165 / .35);
+}
+@keyframes talk-invite {
+  0%, 100% { box-shadow: 0 10px 28px rgb(0 0 0 / .25), 0 0 0 0 rgb(254 240 138 / .55); }
+  50% { box-shadow: 0 10px 28px rgb(0 0 0 / .25), 0 0 0 10px rgb(254 240 138 / 0); }
+}
+.talk-orb {
+  width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; gap: 3px;
+  background: var(--desk-highlight, #fef08a);
+}
+.talk-orb i { width: 3px; height: 8px; border-radius: 2px; background: var(--desk-stroke, #2d2d2a); transition: height 160ms ease; }
+.talk-pill.is-talking .talk-orb { background: #fffdf9; }
+.talk-pill.is-talking .talk-orb i, .talk-pill.tutor-speaking .talk-orb i { animation: talk-wave 0.9s ease-in-out infinite; }
+.talk-orb i:nth-child(2) { animation-delay: -.15s !important; }
+.talk-orb i:nth-child(3) { animation-delay: -.3s !important; }
+.talk-orb i:nth-child(4) { animation-delay: -.45s !important; }
+.talk-orb i:nth-child(5) { animation-delay: -.6s !important; }
+@keyframes talk-wave { 0%, 100% { height: 6px; } 50% { height: 22px; } }
+.talk-copy { display: flex; align-items: center; gap: 10px; font: 14px var(--font-family-body); text-align: left; white-space: nowrap; }
+.talk-copy b { font-family: var(--font-script); font-size: 18px; font-weight: 700; }
+.keycap {
+  display: inline-block; padding: 5px 14px 6px; font: 700 13px var(--font-family-body); color: var(--desk-stroke, #2d2d2a);
+  background: #fffdf9; border-radius: 7px; box-shadow: inset 0 -3px 0 rgb(0 0 0 / .18), 0 2px 0 rgb(0 0 0 / .35);
+}
+
 .lesson-captions {
-  position: absolute; left: 50%; bottom: 76px; translate: -50% 0; z-index: 400; pointer-events: none;
-  width: min(760px, calc(100% - 40px)); text-align: center;
+  position: absolute; left: 50%; top: 64px; translate: -50% 0; z-index: 390; pointer-events: none;
+  width: min(640px, calc(100% - 48px)); text-align: center;
 }
 .lesson-captions p {
   display: inline; margin: 0; padding: 6px 12px; line-height: 2.1; box-decoration-break: clone; -webkit-box-decoration-break: clone;
-  font: 500 17px var(--font-family-body); color: #fffdf9; background: rgb(28 25 23 / .82); border-radius: 6px;
+  font: 500 16px var(--font-family-body); color: #fffdf9; background: rgb(28 25 23 / .78); border-radius: 6px;
 }
+.lesson-captions { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 2; }
 .lesson-captions .lesson-captions-detail { font-size: 14px; background: rgb(28 25 23 / .6); }
+@media (max-width: 900px) {
+  .talk-pill .talk-copy span:not(.keycap) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .talk-pill, .talk-orb i { animation: none !important; } }
+
+/* One movable bar: lesson controls + talk pill side by side. Default: bottom-left, clear of tldraw's centred toolbar. */
+.lesson-bar {
+  position: absolute; left: 16px; bottom: 16px; z-index: 400;
+  display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px);
+}
+.lesson-bar.is-placed { bottom: auto; }
+.bar-grip {
+  cursor: grab; padding: 0 4px 0 2px; font: 700 13px/1 var(--font-family-body); letter-spacing: -2px;
+  color: rgb(45 45 42 / .45); user-select: none; touch-action: none;
+}
+.bar-grip:active { cursor: grabbing; color: var(--desk-stroke, #2d2d2a); }
+@media (max-width: 1100px) { .lesson-bar { flex-wrap: wrap; } }
