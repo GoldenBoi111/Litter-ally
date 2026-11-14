@@ -1,0 +1,53 @@
+{
+  "name": "paper-board",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n api,web \"node --env-file-if-exists=.env server/index.mjs\" \"vite --host 127.0.0.1 --port 5185\"",
+    "voice:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-voice.ps1",
+    "voice:start": "powershell -ExecutionPolicy Bypass -File scripts/start-voice-services.ps1",
+    "voice:rtc:start": "powershell -ExecutionPolicy Bypass -File scripts/start-voice-rtc.ps1",
+    "voice:stop": "powershell -ExecutionPolicy Bypass -File scripts/stop-voice-services.ps1",
+    "app:local": "powershell -ExecutionPolicy Bypass -File scripts/run-paper-board.ps1",
+    "voice:benchmark:local": "node --env-file-if-exists=.env scripts/benchmark-local-voice.mjs",
+    "voice:benchmark": "node --env-file-if-exists=.env scripts/benchmark-voice.mjs",
+    "test": "node --experimental-test-module-mocks --test server/*.test.mjs",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "^0.7.11",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@langchain/openai": "^1.8.4",
+    "@ricky0123/vad-web": "^0.0.31",
+    "@tldraw/tlschema": "5.6.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "concurrently": "10.0.7",
+    "deepagents": "^1.16.4",
+    "express": "5.3.0",
+    "ipaddr.js": "2.5.0",
+    "langchain": "^1.6.5",
+    "multer": "2.5.0",
+    "pdfjs-dist": "6.5.438",
+    "radix-ui": "^1.8.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tailwind-merge": "^3.7.0",
+    "tesseract.js": "^7.0.0",
+    "tldraw": "5.6.0",
+    "vite": "8.3.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@astryxdesign/cli": "^0.7.11",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tailwindcss": "^4.3.5",
+    "tw-animate-css": "^1.4.0",
+    "typescript": "7.0.2"
+  }
+}
