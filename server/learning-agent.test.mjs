@@ -46,11 +46,12 @@ test('diagnosis calls a read-only deep agent with the source and medium reasonin
     apiKey: 'test-key', model: 'gpt-6-luna', title: 'Sample', text: '[Page 1 of 3]\nFirst page\n\n[Page 2 of 3]\nSecond page\n\n[Page 3 of 3]\nThird page', pageCount: 3,
   })
 
-  assert.equal(result.goal, 'Understand the selected material from its key ideas through its evidence and implications.')
-  assert.deepEqual(lastAgentInput.files['/paper/pages/page-001.txt'].content, ['[Page 1 of 3]\nFirst page'])
-  assert.deepEqual(lastAgentInput.files['/paper/pages/page-003.txt'].content, ['[Page 3 of 3]\nThird page'])
-  assert.match(lastAgentInput.files['/paper/source-index.txt'].content[0], /page-003\.txt/)
-  assert.equal(lastInvokeOptions.recursionLimit, 22)
+  assert.equal(result.goal, 'Understand the main ideas of the selected material and how they work.')
+  const batch = lastAgentInput.files['/paper/batches/pages-001-003.txt'].content[0]
+  assert.match(batch, /^\[Page 1 of 3\]\nFirst page/)
+  assert.match(batch, /\[Page 3 of 3\]\nThird page$/)
+  assert.match(lastAgentInput.files['/paper/source-index.txt'].content[0], /pages-001-003\.txt/)
+  assert.equal(lastInvokeOptions.recursionLimit, 20)
   assert.equal(lastAgentOptions.middleware[0].options.permissions[0].operations[0], 'read')
   assert.deepEqual(lastAgentOptions.model.options.reasoning, { effort: 'medium' })
 })
@@ -100,4 +101,12 @@ test('source filter accepts reputable academic hosts and rejects lookalikes', ()
   assert.equal(isReputableSourceUrl('https://pmc.ncbi.nlm.nih.gov/articles/PMC123/'), true)
   assert.equal(isReputableSourceUrl('https://nih.gov.attacker.example/article'), false)
   assert.equal(isReputableSourceUrl('http://nih.gov/article'), false)
+})
+
+test('pages are grouped into batches by count and size', async () => {
+  const { batchPages } = await import('./learning-agent.mjs')
+  assert.deepEqual(batchPages(Array.from({ length: 20 }, () => 'x')).map(b => b.path), [
+    '/paper/batches/pages-001-008.txt', '/paper/batches/pages-009-016.txt', '/paper/batches/pages-017-020.txt',
+  ])
+  assert.equal(batchPages(['a'.repeat(20_000), 'b'.repeat(20_000), 'c']).length, 2)
 })
