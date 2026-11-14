@@ -131,6 +131,23 @@ export async function createAuth({ dataDir }) {
     res.json({ user })
   })
 
+  router.patch('/profile', async (req, res) => {
+    const current = await currentUser(req)
+    if (!current) return res.status(401).json({ error: 'Sign in to continue.' })
+    const name = String(req.body?.name || '').trim().slice(0, 80)
+    if (!name) return res.status(400).json({ error: 'Enter a name.' })
+    const updated = await withLock('users', async () => {
+      const users = await loadUsers()
+      const index = users.findIndex(user => user.id === current.id)
+      if (index < 0) return null
+      users[index] = { ...users[index], name }
+      await writeJson(usersPath, users)
+      return publicUser(users[index])
+    })
+    if (!updated) return res.status(401).json({ error: 'Sign in to continue.' })
+    res.json({ user: updated })
+  })
+
   async function requireUser(req, res, next) {
     try {
       const user = await currentUser(req)
