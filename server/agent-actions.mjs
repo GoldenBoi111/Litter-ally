@@ -13,7 +13,7 @@ export const diagramPlanSchema = {
   required: ['actions'],
   properties: {
     actions: {
-      type: 'array', minItems: 4, maxItems: 20,
+      type: 'array', minItems: 4, maxItems: 40,
       items: {
         anyOf: [
           {
@@ -119,7 +119,7 @@ export function validateDiagramPlan(value) {
   if (!value || typeof value !== 'object' || !Array.isArray(value.actions)) {
     throw new Error('OpenAI returned an invalid diagram plan.')
   }
-  if (value.actions.length < 4 || value.actions.length > 20) throw new Error('The diagram action count is outside the supported range.')
+  if (value.actions.length < 4 || value.actions.length > 40) throw new Error('The diagram action count is outside the supported range.')
 
   const created = new Set()
   const actionIds = new Set()
