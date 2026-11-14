@@ -46,11 +46,12 @@ test('diagnosis calls a read-only deep agent with the source and medium reasonin
     apiKey: 'test-key', model: 'gpt-6-luna', title: 'Sample', text: '[Page 1 of 3]\nFirst page\n\n[Page 2 of 3]\nSecond page\n\n[Page 3 of 3]\nThird page', pageCount: 3,
   })
 
-  assert.equal(result.goal, 'Understand the selected material from its key ideas through its evidence and implications.')
-  assert.deepEqual(lastAgentInput.files['/paper/pages/page-001.txt'].content, ['[Page 1 of 3]\nFirst page'])
-  assert.deepEqual(lastAgentInput.files['/paper/pages/page-003.txt'].content, ['[Page 3 of 3]\nThird page'])
-  assert.match(lastAgentInput.files['/paper/source-index.txt'].content[0], /page-003\.txt/)
-  assert.equal(lastInvokeOptions.recursionLimit, 22)
+  assert.equal(result.goal, 'Understand the main ideas of the selected material and how they work.')
+  const batch = lastAgentInput.files['/paper/batches/pages-001-003.txt'].content[0]
+  assert.match(batch, /^\[Page 1 of 3\]\nFirst page/)
+  assert.match(batch, /\[Page 3 of 3\]\nThird page$/)
+  assert.match(lastAgentInput.files['/paper/source-index.txt'].content[0], /pages-001-003\.txt/)
+  assert.equal(lastInvokeOptions.recursionLimit, 20)
   assert.equal(lastAgentOptions.middleware[0].options.permissions[0].operations[0], 'read')
   assert.deepEqual(lastAgentOptions.model.options.reasoning, { effort: 'medium' })
 })
