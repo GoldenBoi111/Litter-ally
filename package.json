@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n api,web \"node --env-file-if-exists=.env server/index.mjs\" \"vite --host 127.0.0.1 --port 5185\"",
+    "dev": "concurrently -k -n api,web \"node --watch --env-file-if-exists=.env server/index.mjs\" \"vite --host 127.0.0.1 --port 5185\"",
     "voice:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-voice.ps1",
     "voice:start": "powershell -ExecutionPolicy Bypass -File scripts/start-voice-services.ps1",
     "voice:rtc:start": "powershell -ExecutionPolicy Bypass -File scripts/start-voice-rtc.ps1",
@@ -12,12 +12,12 @@
     "app:local": "powershell -ExecutionPolicy Bypass -File scripts/run-paper-board.ps1",
     "voice:benchmark:local": "node --env-file-if-exists=.env scripts/benchmark-local-voice.mjs",
     "voice:benchmark": "node --env-file-if-exists=.env scripts/benchmark-voice.mjs",
-    "test": "node --experimental-strip-types --experimental-test-module-mocks --test server/*.test.mjs src/board/*.test.mjs",
+    "test": "node --experimental-strip-types --experimental-test-module-mocks --test server/*.test.mjs src/*.test.mjs src/board/*.test.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "voice:setup:mac": "bash scripts/setup-voice-mac.sh",
     "voice:start:mac": "bash scripts/start-voice-mac.sh",
-    "app:mac": "concurrently -k -n voice,api,web \"bash scripts/start-voice-mac.sh\" \"node --env-file-if-exists=.env server/index.mjs\" \"vite --host 127.0.0.1 --port 5185\""
+    "app:mac": "concurrently -k -n voice,api,web \"bash scripts/start-voice-mac.sh\" \"node --watch --env-file-if-exists=.env server/index.mjs\" \"vite --host 127.0.0.1 --port 5185\""
   },
   "dependencies": {
     "@astryxdesign/core": "^0.7.11",
