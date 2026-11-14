@@ -79,3 +79,45 @@
 .board-string .string-thread { transition: stroke-width 120ms var(--ease-out); }
 .board-string.is-selected .string-thread { stroke-width: 4; }
 .board-string.is-selected .string-shadow { stroke-width: 6; stroke: rgb(40 36 32 / 0.24); }
+
+/* ---------- Layout switcher (spec items 11–14) ---------- */
+.board-layouts {
+  position: absolute; right: 14px; bottom: 14px; z-index: 300; display: flex; gap: 2px; padding: 4px;
+  background: var(--ll-paper); border-radius: 6px; box-shadow: 0 4px 14px rgb(40 36 32 / 0.14);
+}
+.board-layouts button {
+  width: 30px; height: 28px; border: 0; border-radius: 4px; background: transparent; cursor: pointer;
+  font: 600 13px/1 var(--font-family-body, system-ui); color: var(--ll-ink);
+}
+.board-layouts button[aria-checked='true'] { background: var(--ll-ink); color: var(--ll-paper); }
+
+/* Mode A: archival daylight paper, 1px ink borders, cobalt/vermilion margins. */
+.board[data-layout='editorial'] { background: #f7f5f0; --string: #c2410c; --string-light: #1d4ed8; }
+.board[data-layout='editorial'] .board-card { outline: 1px solid #1c1917; font-family: Georgia, 'Times New Roman', serif; }
+
+/* Mode B: midnight command center, dot grid, glass cards, neon vectors. */
+.board[data-layout='command'] {
+  --string: #38bdf8; --string-light: #a5f3fc;
+  background: radial-gradient(circle, rgb(148 163 184 / 0.18) 1px, transparent 1.2px) 0 0 / 22px 22px, #0f0f23;
+}
+.board[data-layout='command'] .board-card { filter: drop-shadow(0 0 10px rgb(56 189 248 / 0.25)); opacity: 0.92; backdrop-filter: blur(6px); }
+.board[data-layout='command'] .string-thread { filter: drop-shadow(0 0 4px #38bdf8); }
+.board[data-layout='command'] .board-layouts,
+.board[data-layout='command'] .board-actions { background: rgb(15 23 42 / 0.8); backdrop-filter: blur(8px); }
+.board[data-layout='command'] .board-layouts button,
+.board[data-layout='command'] .board-actions button,
+.board[data-layout='command'] .board-empty { color: #e2e8f0; }
+.board[data-layout='command'] .board-layouts button[aria-checked='true'] { background: #38bdf8; color: #0f0f23; }
+
+/* Mode C: radial gravity — same paper, cards animate into orbit. */
+.board[data-layout='gravity'] { background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--ll-ink) 6%, transparent), transparent 60%), var(--ll-desk); }
+
+/* ---------- Command palette (spec item 34) ---------- */
+.palette-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; justify-items: center; align-items: start; padding-top: 14vh; background: rgb(20 18 16 / 0.28); }
+.palette { width: min(560px, 92vw); background: var(--ll-paper, #fff); border-radius: 10px; box-shadow: 0 20px 50px rgb(0 0 0 / 0.28); overflow: hidden; }
+.palette input { width: 100%; box-sizing: border-box; padding: 14px 16px; border: 0; border-bottom: 1px solid rgb(0 0 0 / 0.08); font: 15px var(--font-family-body, system-ui); background: transparent; outline: none; color: var(--ll-ink); }
+.palette ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow: auto; }
+.palette li { display: flex; justify-content: space-between; padding: 9px 10px; border-radius: 6px; cursor: pointer; font: 14px var(--font-family-body, system-ui); color: var(--ll-ink); }
+.palette li[aria-selected='true'] { background: color-mix(in srgb, var(--ll-ink) 8%, transparent); }
+.palette kbd { font: 12px var(--font-mono, monospace); opacity: 0.6; }
+.palette-empty { opacity: 0.6; cursor: default; }
