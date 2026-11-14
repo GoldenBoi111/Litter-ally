@@ -3,6 +3,7 @@ import './board.css'
 import { createShapeId, useEditor, useValue, type Editor, type TLShape } from 'tldraw'
 import type { ImportedPaper } from '@/storage'
 import { PersistentTldraw } from '@/persistentCanvas'
+import { loadProjects, PROJECTS_UPDATED_EVENT, type Project, type ProjectSynthesis } from '@/projects'
 import { CARD_H, CARD_W, RELATIONS, boardShapeUtils, type Relation } from './shapes'
 import { LAYOUTS, applyLayout, loadLayout, saveLayout, type LayoutId } from './layouts'
 import { downloadWorkspace, importWorkspace, pickWorkspaceFile, resetWorkspace } from './workspace'
@@ -26,7 +27,11 @@ function freeSpot(editor: Editor) {
 }
 
 /** Adds missing cards (under any string, so pins stay on top) and drops cards for deleted sources. Returns how many were added. */
+<<<<<<< Updated upstream
 function syncCards(editor: Editor, papers: ImportedPaper[], summaries: Record<string, string> = {}) {
+=======
+function syncCards(editor: Editor, papers: ImportedPaper[], summaries: Record<string, string>) {
+>>>>>>> Stashed changes
   const cards = editor.getCurrentPageShapes().filter(s => s.type === 'source-card')
   const onBoard = new Set(cards.map(c => c.props.sourceId))
   const live = new Set(papers.map(p => p.id))
@@ -38,6 +43,10 @@ function syncCards(editor: Editor, papers: ImportedPaper[], summaries: Record<st
         id, type: 'source-card', ...freeSpot(editor),
         props: { sourceId: paper.id, title: paper.title, kind: paper.sourceKind || 'pdf', segments: paper.pageCount, imported: new Date(paper.importedAt).toLocaleDateString(), summary: summaries[paper.id] || '' },
       })
+    }
+    for (const card of cards.filter(card => live.has(card.props.sourceId))) {
+      const summary = summaries[card.props.sourceId] || ''
+      if (card.props.summary !== summary) editor.updateShape({ id: card.id, type: 'source-card', props: { summary } })
     }
     if (added.length) editor.sendToBack(added.map(a => a.id))
     // Fill in summaries that arrived after a card was placed.
@@ -86,6 +95,7 @@ function SelectionActions() {
   )
 }
 
+<<<<<<< Updated upstream
 export function Board({ papers, summaries = {}, canvasKey = 'margin-board-v1', onOpen, onCompare, onAdd }: { papers: ImportedPaper[]; summaries?: Record<string, string>; canvasKey?: string; onOpen: (sourceId: string) => void; onCompare: (a: string, b: string) => void; onAdd: () => void }) {
   const [editor, setEditor] = useState<Editor | null>(null)
   const [layout, setLayout] = useState<LayoutId>(loadLayout)
@@ -120,6 +130,24 @@ export function Board({ papers, summaries = {}, canvasKey = 'margin-board-v1', o
     if (syncCards(editor, papers, summaries)) layout === 'gravity' ? applyLayout(editor, layout) : fitBoard(editor)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, papers, summaries])
+=======
+export function Board({ canvasKey, papers, summaries, onOpen, onCompare, onAdd }: { canvasKey: string; papers: ImportedPaper[]; summaries: Record<string, string>; onOpen: (sourceId: string) => void; onCompare: (leftId: string, rightId: string) => void; onAdd: () => void }) {
+  const [editor, setEditor] = useState<Editor | null>(null)
+  const [synthesis, setSynthesis] = useState<ProjectSynthesis | null>(null)
+
+  useEffect(() => {
+    if (editor && syncCards(editor, papers, summaries)) editor.zoomToFit({ animation: { duration: 320 } })
+  }, [editor, papers, summaries])
+
+  useEffect(() => {
+    let live = true
+    const select = (projects: Project[]) => projects.find(project => canvasKey === `board-${project.id}`)?.synthesis || null
+    const onProjectsUpdated = (event: Event) => setSynthesis(select((event as CustomEvent<Project[]>).detail))
+    window.addEventListener(PROJECTS_UPDATED_EVENT, onProjectsUpdated)
+    loadProjects().then(projects => { if (live) setSynthesis(select(projects)) }).catch(() => { if (live) setSynthesis(null) })
+    return () => { live = false; window.removeEventListener(PROJECTS_UPDATED_EVENT, onProjectsUpdated) }
+  }, [canvasKey])
+>>>>>>> Stashed changes
 
   useEffect(() => {
     if (!editor) return
@@ -148,10 +176,30 @@ export function Board({ papers, summaries = {}, canvasKey = 'margin-board-v1', o
         onMount={ed => {
           setEditor(ed)
           if (import.meta.env.DEV) Object.assign(window, { boardEditor: ed }) // for local UI checks
+<<<<<<< Updated upstream
           fitBoard(ed, 0)
         }}
       />
       <CommandPalette commands={commands} />
+=======
+        }}
+      />
+      {synthesis && <aside className="board-connections" aria-label="How project sources connect">
+        <h2>How these sources connect</h2>
+        <p>{synthesis.synthesis}</p>
+        {synthesis.connections.length > 0 && <ul>{synthesis.connections.map((connection, index) => {
+          const left = papers.find(paper => paper.id === connection.leftId)
+          const right = papers.find(paper => paper.id === connection.rightId)
+          if (!left || !right) return null
+          return <li key={`${connection.leftId}:${connection.rightId}:${index}`}>
+            <button onClick={() => onCompare(left.id, right.id)} aria-label={`Compare ${left.title} and ${right.title}: ${connection.relation}`}>
+              <span><b>{left.title}</b> <i>{connection.relation}</i> <b>{right.title}</b></span>
+              <small>{connection.reason}</small>
+            </button>
+          </li>
+        })}</ul>}
+      </aside>}
+>>>>>>> Stashed changes
       {!papers.length && (
         <div className="board-empty">
           <p>Your board is empty.</p>
