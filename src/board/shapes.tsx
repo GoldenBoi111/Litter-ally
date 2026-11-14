@@ -35,12 +35,13 @@ export class SourceCardUtil extends ShapeUtil<SourceCardShape> {
   }
   component(shape: SourceCardShape) {
     const { w, h, title, kind, segments, sourceId, summary } = shape.props
+    const role = shape.meta.documentRole === 'process' ? 'process' : 'content'
     return (
-      <HTMLContainer className="board-card" style={{ width: w, height: h }}>
-        <IndexCard seed={sourceId} size={[w, h]} className="h-full min-h-0 max-w-none select-none">
-          <IndexCardHeader><IndexCardTitle title={title}>{title}</IndexCardTitle></IndexCardHeader>
+      <HTMLContainer className={`board-card board-card-${role}`} style={{ width: w, height: h }}>
+        <IndexCard seed={sourceId} size={[w, h]} className={`h-full min-h-0 max-w-none select-none board-index-${role}`}>
+          <IndexCardHeader><LabelTag><LabelTagTitle>{role === 'process' ? 'Process guide' : 'Content source'}</LabelTagTitle></LabelTag><IndexCardTitle title={title}>{title}</IndexCardTitle></IndexCardHeader>
           <IndexCardContent className="board-card-summary">{summary || 'Reading this source…'}</IndexCardContent>
-          <IndexCardFooter><span>{kind.toUpperCase()} · {segments} {segments === 1 ? 'section' : 'sections'}</span><span>Double-click to learn</span></IndexCardFooter>
+          <IndexCardFooter><span>{kind.toUpperCase()} · {segments} {segments === 1 ? 'section' : 'sections'}</span><span>{role === 'process' ? 'Guides project lessons' : 'Double-click to learn'}</span></IndexCardFooter>
         </IndexCard>
       </HTMLContainer>
     )
