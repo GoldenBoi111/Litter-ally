@@ -137,7 +137,6 @@ export function formatCheckpointBrief(brief: CheckpointBrief) {
     checkpoint.backgroundNotes ? `External background only (do not attribute to the supplied material): ${checkpoint.backgroundNotes}${backgroundLines.length ? `\nReputable sources: ${backgroundLines.join('\n')}` : ''}` : '',
     `Available diagrams (zero-based indexes):\n${diagramLines.length ? diagramLines.join('\n') : 'No prepared diagrams; a learner-requested visual can still be created.'}`,
     `Walkthrough: ${checkpoint.narration}`,
-    `Check for understanding: ${checkpoint.checkForUnderstanding}`,
   ].join('\n')
 }
 
@@ -177,6 +176,10 @@ export type SelectionContext = {
 }
 
 const ACTION_DELAY_MS = 180
+/** Handwriting pace. Teaching beats draw a little slower than raw speed; full diagrams draw like a tutor at a whiteboard
+ * while the voice keeps talking (roughly 3x slower), so ink appears as it is being explained rather than all at once. */
+export const BEAT_PACE = 1.6
+export const DIAGRAM_PACE = 3
 
 function wait(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -249,7 +252,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
         placement: 'continue', anchorBeatId: '', actions: plan.actions.slice(start, start + 12) as TeachingAction[],
       }, {
         lessonId: context.lessonId, checkpointIndex: context.checkpointIndex, signal: context.signal, onAction: context.onAction, onCursor: context.onCursor,
-        diagramId, generationId, origin,
+        diagramId, generationId, origin, pace: DIAGRAM_PACE,
       })
     }
     return
@@ -310,7 +313,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
       createdIds.push(id)
       context.onAction?.(`Connected ${action.fromId} to ${action.toId}`)
     }
-    await wait(ACTION_DELAY_MS, context.signal)
+    await wait(ACTION_DELAY_MS * DIAGRAM_PACE * 2, context.signal)
   }
 
   if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
@@ -362,7 +365,10 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
   diagramId?: string
   generationId?: string
   origin?: { x: number; y: number }
+  /** Multiplier on stroke and lettering delays; defaults to BEAT_PACE. */
+  pace?: number
 }): Promise<TeachingExecutionState> {
+  const pace = context.pace ?? BEAT_PACE
   const beat = readTeachingBeat(input)
   const origin = context.origin || beatOrigin(editor, beat, context.lessonId, context.checkpointIndex)
   const startedAt = performance.now()
@@ -455,7 +461,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
           cursorPoint = { x: origin.x + point.x, y: origin.y + point.y }
           context.onCursor?.(cursorPoint)
           editor.updateShape({ id, type: 'draw', meta: metaFor(action, progress === action.points.length ? 'complete' : 'interrupted', progress), props: { segments: compressLegacySegments([{ type: 'free', points: strokePoints() }]), isComplete: progress === action.points.length } } as any)
-          await wait(16, context.signal)
+          await wait(16 * pace, context.signal)
         }
       } catch (error) {
         editor.updateShape({ id, type: 'draw', meta: metaFor(action, 'interrupted', progress) } as any)
@@ -473,11 +479,11 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       try {
         while (progress < action.text.length) {
           if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
-          progress = Math.min(action.text.length, progress + 3)
+          progress = Math.min(action.text.length, progress + (pace > 2 ? 1 : 2))
           cursorPoint = { x: textPoint.x + Math.min(progress * 3, 420), y: textPoint.y }
           context.onCursor?.(cursorPoint)
           editor.updateShape({ id, type: 'text', meta: metaFor(action, progress === action.text.length ? 'complete' : 'interrupted', progress), props: { richText: toRichText(action.text.slice(0, progress)) } } as any)
-          await wait(22, context.signal)
+          await wait(22 * pace, context.signal)
         }
       } catch (error) {
         editor.updateShape({ id, type: 'text', meta: metaFor(action, 'interrupted', progress) } as any)
