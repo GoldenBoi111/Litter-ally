@@ -1,0 +1,238 @@
+@import url('https://kevintngo.github.io/looseleaf/fonts/kevin-sans.css');
+
+:root {
+  --font-hand: 'Kevin Sans Hand', 'Kevin Sans', cursive;
+  --font-script: 'Kevin Sans Script', 'Kevin Sans', cursive;
+  --font-type: 'Kevin Sans Type', 'Kevin Sans', cursive;
+  --font-family-body: var(--font-hand);
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --desk-parchment: #a8c8bb;
+  --desk-card: #fbf6e9;
+  --desk-card-warm: #f7e38a;
+  --desk-stroke: #2a2420;
+  --desk-indigo: #2c4f9e;
+  --desk-highlight: #f8dc4c;
+  --ll-desk: #a8c8bb;
+  --ll-desk-deep: #93b4a7;
+  --ll-paper: #f8f5ee;
+  --ll-paper-shade: #ece6da;
+  --ll-slip: #fbf8f1;
+  --ll-card: #fbf6e9;
+  --ll-ink: #2a2420;
+  --ll-ink-soft: #4a423b;
+  --ll-ink-muted: #4a433c;
+  --ll-ink-you: #2c4f9e;
+
+  --ink: #2a2420;
+  --muted: #6b6660;
+  --line: #d4ded7;
+  --paper: #f8f5ee;
+  --olive: #3b7a4b;
+  --orange: #df6b3c;
+  --serif: var(--font-script);
+  --mono: var(--font-mono);
+}
+
+body,
+.app-shell,
+.workspace,
+.canvas-column,
+.canvas-area,
+.page,
+.topbar,
+.left-rail,
+.conversation,
+.canvas-toolbar,
+.focus-strip {
+  color: var(--ll-ink);
+}
+
+body,
+.app-shell,
+.workspace,
+.canvas-column,
+.canvas-area,
+.page {
+  background-color: var(--ll-desk);
+}
+
+.topbar,
+.left-rail,
+.conversation,
+.canvas-toolbar,
+.focus-strip,
+.desk-card,
+.lesson-dock,
+.composer,
+.source-popover,
+.canvas-empty-state {
+  background-color: var(--ll-paper);
+  border-color: var(--ll-paper-shade);
+}
+
+.document-cover,
+.card-grid .desk-card:nth-child(3n+2),
+.lesson.active,
+.paper-list-item.selected,
+.conversation-context,
+.you .message-content p {
+  background-color: var(--ll-card);
+}
+
+.page,
+.page-head p,
+.desk-card .muted,
+.desk-card .meta,
+.message-content p,
+.paper-list-copy small {
+  color: var(--ll-ink-soft);
+}
+
+button:not(.tl-container button):not([class*='tlui']),
+input,
+textarea,
+select {
+  color: var(--ll-ink);
+}
+
+.app-shell .tl-container.tl-theme__light {
+
+  --tl-font-sans: var(--font-hand);
+  --tl-font-serif: var(--font-script);
+  --tl-font-mono: var(--font-mono);
+}
+
+.canvas-area .tl-background {
+  background-color: #fff !important;
+  background-image: none !important;
+}
+.canvas-area .tlui-layout {
+  --tl-color-background: #fff;
+  background-color: #fff;
+}
+.canvas-area { background-color: #fff; }
+
+/* Keep small labels legible and make actionable surfaces distinct from paper. */
+:is(label, small, .section-eyebrow, .brand-caption, .paper-sub,
+  .canvas-count, .canvas-caption, .live-indicator, .conversation-sub,
+  .message-meta span, .quick-label, .enter-hint, .chat-foot, .lesson-copy small,
+  .lesson-current, .resume-note, .library-empty, .privacy-note, .empty-footnote,
+  .drop-zone > span, .drop-zone > small, .url-form > small, .panel-sub,
+  .detail-kicker, .detail-meta, .source-footnote, .dialog-intro, .dialog-safety,
+  .source-popover span, .extracted-heading small, .extracted-heading > span) {
+  color: var(--ll-ink-soft);
+  font-size: max(12px, 1em);
+}
+
+button:not(.tl-container button):not([class*='tlui']):not(.card-hit):not(.talk-pill):not(.dock-primary):not(.send-button):not([data-variant='destructive']) {
+  color: var(--ll-ink);
+}
+button:not(.tl-container button):not([class*='tlui']) {
+  font-size: max(12px, 1em);
+}
+
+.share-button,
+.tool-button,
+.prompt-list button {
+  color: var(--ll-ink);
+  background: var(--ll-card);
+  border-color: var(--ll-ink);
+}
+
+.lesson.active,
+.paper-list-item.selected,
+.intake-tabs button.selected {
+  color: var(--ll-ink);
+  background: var(--ll-sticky-yellow);
+  border-color: var(--ll-ink);
+}
+
+.conversation-context {
+  background: #dbe9e2;
+  color: var(--ll-ink);
+}
+
+.url-control button,
+.panel-add-button {
+  color: var(--ll-ink);
+  background: var(--ll-marker);
+  border-color: var(--ll-ink);
+}
+.url-control button:hover:not(:disabled),
+.panel-add-button:hover {
+  background: var(--ll-ink);
+  color: var(--ll-paper);
+}
+.send-button {
+  color: var(--ll-paper);
+  background: var(--ll-ink);
+}
+.send-button:disabled {
+  color: var(--ll-ink-soft);
+  background: var(--ll-paper-shade);
+}
+
+/* Keep filled actions indigo, quiet actions on paper, and selected actions yellow. */
+button[data-slot='button'][data-variant='default'] {
+  --ll-marker: var(--desk-indigo, #3b4a8c);
+  color: var(--ll-paper) !important;
+}
+button[data-slot='button'][data-variant='secondary'] { --ll-hi: var(--desk-highlight, #fef08a); }
+button[data-slot='button'][data-variant='outline'] {
+  color: var(--ll-ink) !important;
+  background-color: var(--ll-slip) !important;
+  border-color: var(--ll-ink) !important;
+}
+button[data-slot='button'][data-variant='destructive'] { --ll-red: #a8322b; color: var(--ll-paper) !important; }
+
+:is(.url-control button, .panel-add-button, .send-button, .dock-primary, .lesson-text-form button, .board-empty button) {
+  color: var(--ll-paper) !important;
+  background: var(--desk-indigo, #3b4a8c) !important;
+  border-color: var(--desk-indigo, #3b4a8c) !important;
+}
+:is(.url-control button, .panel-add-button, .send-button, .dock-primary, .lesson-text-form button, .board-empty button):hover:not(:disabled) {
+  background: var(--ll-link-hover, #1f3b7a) !important;
+}
+
+:is(.share-button, .tool-button, .prompt-list button, .add-source-button,
+  .board-actions button, .board-layouts button, .board-connections li button,
+  .lesson-dock button:not(.dock-primary), .dialog-close) {
+  color: var(--ll-ink) !important;
+  background: var(--ll-slip) !important;
+  border: 1px solid var(--ll-ink) !important;
+}
+:is(.lesson.active, .paper-list-item.selected, .intake-tabs button.selected,
+  .lesson-dock button[aria-pressed='true'], .lesson-dock button[aria-expanded='true'],
+  .board-actions button[aria-pressed='true'], .board-layouts button[aria-checked='true']) {
+  color: var(--ll-ink) !important;
+  background: var(--desk-highlight, #fef08a) !important;
+  border-color: var(--ll-ink) !important;
+}
+
+:is(.browse-link, .back-link, .source-button, .crumb-link, .focus-strip button,
+  .show-text-button, .library-empty button, .auth-switch button) {
+  color: var(--ll-ink-you) !important;
+}
+.card-delete { color: #8f352e !important; }
+button:not(.tl-container button):not([class*='tlui']):focus-visible {
+  outline: 3px solid var(--desk-indigo, #3b4a8c) !important;
+  outline-offset: 2px;
+}
+button:not(.tl-container button):not([class*='tlui']):disabled {
+  color: var(--ll-ink-muted) !important;
+  background-color: var(--ll-paper-shade) !important;
+  border-color: var(--ll-pencil-mark) !important;
+  filter: none;
+}
+
+.canvas-area .tl-container.tl-theme__light,
+.board .tl-container.tl-theme__light {
+  --tl-color-selection-fill: color-mix(in srgb, var(--desk-indigo, #3b4a8c) 18%, transparent);
+  --tl-color-selection-stroke: var(--desk-indigo, #3b4a8c);
+  --tl-color-low: color-mix(in srgb, var(--desk-indigo, #3b4a8c) 6%, var(--ll-paper));
+  --tl-color-selected: var(--desk-indigo, #3b4a8c);
+  --tl-color-selected-contrast: var(--ll-paper);
+  --tl-color-focus: var(--desk-indigo, #3b4a8c);
+  --tl-color-primary: var(--desk-indigo, #3b4a8c);
+}
+.canvas-area .tl-container.tl-theme__light { --tl-color-background: #fff; }
