@@ -32,13 +32,15 @@ function syncCards(editor: Editor, papers: ImportedPaper[], summaries: Record<st
     for (const { paper, id } of added) {
       const spot = freeSpot(editor)
       editor.createShape({
-        id, type: 'source-card', ...spot, meta: { autoX: spot.x, autoY: spot.y, pendingCluster: true },
-        props: { sourceId: paper.id, title: paper.title, kind: paper.sourceKind || 'pdf', segments: paper.pageCount, imported: new Date(paper.importedAt).toLocaleDateString(), summary: summaries[paper.id] || '' },
+        id, type: 'source-card', ...spot, meta: { autoX: spot.x, autoY: spot.y, pendingCluster: true, documentRole: paper.documentRole || 'content' },
+        props: { sourceId: paper.id, title: paper.title, kind: paper.sourceKind || 'pdf', segments: paper.pageCount, imported: new Date(paper.importedAt).toLocaleDateString(), summary: paper.documentRole === 'process' ? 'Project guide · automatically shapes explanations of content sources.' : summaries[paper.id] || '' },
       })
     }
     for (const card of cards.filter(card => live.has(card.props.sourceId))) {
-      const summary = summaries[card.props.sourceId] || ''
-      if (card.props.summary !== summary) editor.updateShape({ id: card.id, type: 'source-card', props: { summary } })
+      const paper = papers.find(item => item.id === card.props.sourceId)!
+      const role = paper.documentRole || 'content'
+      const summary = role === 'process' ? 'Project guide · automatically shapes explanations of content sources.' : summaries[card.props.sourceId] || ''
+      if (card.props.summary !== summary || card.meta.documentRole !== role) editor.updateShape({ id: card.id, type: 'source-card', props: { summary }, meta: { ...card.meta, documentRole: role } })
     }
     if (added.length) editor.sendToBack(added.map(a => a.id))
   }, { history: 'ignore' })
@@ -119,10 +121,18 @@ function cutString(editor: Editor, string: TLShape) {
 }
 
 /** Floating actions for the current selection: tie two cards, or name a string's relation. */
-function SelectionActions() {
+function SelectionActions({ onChangeRole }: { onChangeRole: (id: string, role: 'content' | 'process') => void }) {
   const editor = useEditor()
   const selected = useValue('selection', () => editor.getSelectedShapes(), [editor])
   const cards = selected.filter(s => s.type === 'source-card')
+  if (cards.length === 1 && selected.length === 1) {
+    const card = cards[0]
+    const role = card.meta.documentRole === 'process' ? 'process' : 'content'
+    return <div className="board-actions" role="toolbar" aria-label="Document role">
+      <span>{role === 'process' ? 'Process guide' : 'Content source'}</span>
+      <button onClick={() => onChangeRole(card.props.sourceId, role === 'process' ? 'content' : 'process')}>{role === 'process' ? 'Mark as content' : 'Mark as process guide'}</button>
+    </div>
+  }
   const string = selected.length === 1 && selected[0].type === 'red-string' ? selected[0] : null
   if (cards.length === 2 && selected.length === 2) {
     return <div className="board-actions" role="toolbar" aria-label="Selection actions"><button onClick={() => tie(editor, cards)}>Tie with string</button></div>
@@ -138,11 +148,12 @@ function SelectionActions() {
   )
 }
 
-export function Board({ canvasKey, papers, summaries, synthesis, hiddenConnectionPairs, analysisStatus, analysisError, onRetry, onHideConnection, onRestoreConnection, onRestoreHiddenConnections, onOpen, onCompare, onAdd }: {
+export function Board({ canvasKey, papers, summaries, synthesis, hiddenConnectionPairs, analysisStatus, analysisError, onRetry, onHideConnection, onRestoreConnection, onRestoreHiddenConnections, onOpen, onCompare, onAdd, onChangeRole }: {
   canvasKey: string; papers: ImportedPaper[]; summaries: Record<string, string>; synthesis: ProjectSynthesis | null
   hiddenConnectionPairs: string[]; analysisStatus: string | null; analysisError: string | null
   onRetry: () => void; onHideConnection: (pair: string) => void; onRestoreConnection: (pair: string) => void; onRestoreHiddenConnections: () => void
   onOpen: (sourceId: string) => void; onCompare: (leftId: string, rightId: string) => void; onAdd: () => void
+  onChangeRole: (sourceId: string, role: 'content' | 'process') => void
 }) {
   const [editor, setEditor] = useState<Editor | null>(null)
   const fitted = useRef(false)
@@ -160,10 +171,10 @@ export function Board({ canvasKey, papers, summaries, synthesis, hiddenConnectio
   }, [editor, papers, summaries])
 
   useEffect(() => {
-    if (!editor || !synthesis) return
+    if (!editor) return
     syncing.current = true
-    try { syncConnections(editor, synthesis, hiddenConnectionPairs) } finally { syncing.current = false }
-    if (clusterNewCards(editor, synthesis)) editor.zoomToFit({ animation: { duration: 320 } })
+    try { syncConnections(editor, synthesis || { synthesis: '', connections: [] }, hiddenConnectionPairs) } finally { syncing.current = false }
+    if (synthesis && clusterNewCards(editor, synthesis)) editor.zoomToFit({ animation: { duration: 320 } })
   }, [editor, synthesis, hiddenConnectionPairs])
 
   useEffect(() => {
@@ -202,7 +213,7 @@ export function Board({ canvasKey, papers, summaries, synthesis, hiddenConnectio
       <PersistentTldraw
         canvasKey={canvasKey}
         shapeUtils={boardShapeUtils}
-        components={{ PageMenu: null, DebugMenu: null, DebugPanel: null, StylePanel: null, InFrontOfTheCanvas: SelectionActions }}
+        components={{ PageMenu: null, DebugMenu: null, DebugPanel: null, StylePanel: null, InFrontOfTheCanvas: () => <SelectionActions onChangeRole={onChangeRole} /> }}
         onMount={ed => {
           setEditor(ed)
           if (import.meta.env.DEV) Object.assign(window, { boardEditor: ed }) // for local UI checks
