@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './board.css'
 import { createShapeId, useEditor, useValue, type Editor, type TLShape } from 'tldraw'
 import type { ImportedPaper } from '@/storage'
 import { PersistentTldraw } from '@/persistentCanvas'
 import { CARD_H, CARD_W, RELATIONS, boardShapeUtils, type Relation } from './shapes'
+import { LAYOUTS, applyLayout, loadLayout, saveLayout, type LayoutId } from './layouts'
+import { downloadWorkspace, importWorkspace, pickWorkspaceFile, resetWorkspace } from './workspace'
+import { CommandPalette, type Command } from './CommandPalette'
 
 const GRID = { cols: 4, dx: CARD_W + 90, dy: CARD_H + 120 }
 
@@ -62,9 +65,37 @@ function SelectionActions() {
 
 export function Board({ papers, onOpen, onAdd }: { papers: ImportedPaper[]; onOpen: (sourceId: string) => void; onAdd: () => void }) {
   const [editor, setEditor] = useState<Editor | null>(null)
+  const [layout, setLayout] = useState<LayoutId>(loadLayout)
+
+  const switchLayout = (next: LayoutId) => {
+    setLayout(next); saveLayout(next)
+    if (editor) applyLayout(editor, next)
+  }
+
+  const commands = useMemo<Command[]>(() => [
+    ...LAYOUTS.map(l => ({ id: `layout-${l.id}`, label: `Layout: ${l.label}`, hint: `Alt+${l.key}`, run: () => switchLayout(l.id) })),
+    { id: 'add', label: 'Add material', run: onAdd },
+    { id: 'fit', label: 'Zoom to fit', hint: 'Shift+1', run: () => editor?.zoomToFit({ animation: { duration: 320 } }) },
+    { id: 'export', label: 'Export workspace (JSON)', run: () => editor && downloadWorkspace(editor, layout) },
+    { id: 'import', label: 'Import workspace (JSON)', run: () => editor && pickWorkspaceFile().then(f => { importWorkspace(editor, f); setLayout(f.layout); saveLayout(f.layout) }).catch(e => alert(e.message)) },
+    { id: 'reset', label: 'Reset workspace', run: () => { if (editor && confirm('Remove all strings and card positions? Your sources stay in the library.')) { resetWorkspace(editor); syncCards(editor, papers) } } },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [editor, layout, papers, onAdd])
 
   useEffect(() => {
-    if (editor && syncCards(editor, papers)) editor.zoomToFit({ animation: { duration: 320 } })
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey) return
+      const l = LAYOUTS.find(l => e.code === `Key${l.key}`)
+      if (l) { e.preventDefault(); switchLayout(l.id) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  useEffect(() => {
+    if (!editor) return
+    if (syncCards(editor, papers)) layout === 'gravity' ? applyLayout(editor, layout) : editor.zoomToFit({ animation: { duration: 320 } })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, papers])
 
   useEffect(() => {
@@ -85,7 +116,7 @@ export function Board({ papers, onOpen, onAdd }: { papers: ImportedPaper[]; onOp
   }, [editor, onOpen])
 
   return (
-    <div className="board">
+    <div className="board" data-layout={layout}>
       <PersistentTldraw
         canvasKey="margin-board-v1"
         shapeUtils={boardShapeUtils}
@@ -96,6 +127,7 @@ export function Board({ papers, onOpen, onAdd }: { papers: ImportedPaper[]; onOp
           ed.zoomToFit({ animation: { duration: 0 } })
         }}
       />
+      <CommandPalette commands={commands} />
       {!papers.length && (
         <div className="board-empty">
           <p>Your board is empty.</p>
@@ -106,3 +138,4 @@ export function Board({ papers, onOpen, onAdd }: { papers: ImportedPaper[]; onOp
     </div>
   )
 }
+
