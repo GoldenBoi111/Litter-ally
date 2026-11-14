@@ -45,7 +45,7 @@ function isTyping(target: EventTarget | null) {
 }
 
 /** Lesson controls (top of the canvas, clear of tldraw's bottom toolbar), live captions, and hold-Space-to-talk. */
-export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, micMuted, transcript, onBuild, onStart, onPause, onResume, onStop, onSelectCheckpoint, onTalkStart, onTalkEnd }: {
+export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, micMuted, transcript, onBuild, onAsk, onStart, onPause, onResume, onStop, onSelectCheckpoint, onTalkStart, onTalkEnd }: {
   plan: TeachingPlan | null
   planBusy: boolean
   checkpointIndex: number
@@ -54,6 +54,7 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
   micMuted: boolean
   transcript: Array<{ role: 'Tutor' | 'You'; text: string }>
   onBuild: () => void
+  onAsk: (question: string) => Promise<void>
   onStart: () => void
   onPause: () => void
   onResume: () => void
@@ -63,6 +64,11 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
   onTalkEnd: () => void
 }) {
   const [captions, setCaptions] = useState(() => localStorage.getItem(CC_KEY) !== 'off')
+  const [textOpen, setTextOpen] = useState(false)
+  const [mapOpen, setMapOpen] = useState(false)
+  const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState('')
   useEffect(() => { localStorage.setItem(CC_KEY, captions ? 'on' : 'off') }, [captions])
 
   const live = ['connecting', 'listening', 'speaking', 'drawing'].includes(status)
@@ -98,6 +104,16 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
   const drag = useDraggable()
   const total = plan?.sessions.length || 0
   const checkpoint = plan?.sessions[checkpointIndex]
+  const conceptsById = new Map((plan?.conceptMap || []).map(concept => [concept.id, concept]))
+  const sendMessage = async (event: React.FormEvent) => {
+    event.preventDefault()
+    const question = message.trim()
+    if (!question || sending || !plan) return
+    setSending(true); setSendError('')
+    try { await onAsk(question); setMessage('') }
+    catch (error) { setSendError(error instanceof Error ? error.message : 'Message could not be sent. Try again.') }
+    finally { setSending(false) }
+  }
 
   return (
     <>
@@ -111,6 +127,7 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
             <button aria-label="Previous part" disabled={checkpointIndex <= 0} onClick={() => onSelectCheckpoint(checkpointIndex - 1)}>‹</button>
             <span className="dock-step" title={checkpoint?.title}>{checkpointIndex + 1}/{total} · {checkpoint?.title}</span>
             <button aria-label="Next part" disabled={checkpointIndex >= total - 1} onClick={() => onSelectCheckpoint(checkpointIndex + 1)}>›</button>
+            <button aria-expanded={mapOpen} aria-controls="lesson-knowledge-map" onClick={() => { setTextOpen(false); setMapOpen(open => !open) }}>Map</button>
             <span className="dock-sep" />
             {status === 'paused' ? <button className="dock-primary" onClick={onResume}>Resume</button>
               : live ? <button className="dock-primary" onClick={onPause}>Pause</button>
@@ -120,7 +137,47 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
         )}
         <span className="dock-sep" />
         <button aria-pressed={captions} title="Captions" onClick={() => setCaptions(c => !c)}>CC</button>
+        <button aria-expanded={textOpen} aria-controls="lesson-text-chat" onClick={() => { setMapOpen(false); setTextOpen(open => !open) }}>Text</button>
       </div>
+
+      {mapOpen && plan && <section id="lesson-knowledge-map" className="lesson-map" aria-label="Lesson knowledge map">
+        <header className="lesson-map-header">
+          <div><strong>Lesson map</strong><span>{checkpointIndex + 1} of {total}</span></div>
+          <button aria-label="Close lesson map" onClick={() => setMapOpen(false)}>×</button>
+        </header>
+        <ol className="lesson-map-steps">
+          {plan.sessions.map((session, index) => {
+            const current = index === checkpointIndex
+            const concepts = session.conceptIds?.map(id => conceptsById.get(id)).filter((item): item is NonNullable<typeof plan.conceptMap>[number] => Boolean(item)) || []
+            const fallbackConcepts = concepts.length ? [] : session.concepts
+            const edges = concepts.flatMap(concept => concept.prerequisites.flatMap(link => {
+              const prerequisite = conceptsById.get(link.id)
+              return prerequisite ? [`${prerequisite.name} → ${concept.name}`] : []
+            }))
+            return <li key={`${index}-${session.title}`} className={current ? 'is-current' : index < checkpointIndex ? 'is-earlier' : ''}>
+              <button className="lesson-map-step" aria-current={current ? 'step' : undefined} onClick={() => onSelectCheckpoint(index)}>
+                <span className="lesson-map-step-head"><span className="lesson-map-number">{index + 1}</span><strong>{session.title}</strong><span className="lesson-map-state">{current ? 'Here' : index < checkpointIndex ? 'Earlier' : index === checkpointIndex + 1 ? 'Next' : ''}</span></span>
+                <span className="lesson-map-concepts">{concepts.map(concept => <span className="lesson-map-node" key={concept.id}>{concept.name}</span>)}{fallbackConcepts.map(concept => <span className="lesson-map-node" key={concept}>{concept}</span>)}</span>
+                {current && <span className="lesson-map-focus"><b>Look out for</b> {session.pageFocus || session.goal}</span>}
+                {edges.length > 0 && <span className="lesson-map-links">{edges.map(edge => <span key={edge}>{edge}</span>)}</span>}
+              </button>
+            </li>
+          })}
+        </ol>
+      </section>}
+
+      {textOpen && <section id="lesson-text-chat" className="lesson-text-chat" aria-label="Text conversation with tutor">
+        <ol className="lesson-text-history" role="log" aria-live="polite">
+          {transcript.length ? transcript.map((line, index) => <li className={line.role === 'You' ? 'from-learner' : ''} key={`${index}-${line.text}`}><b>{line.role === 'You' ? 'You' : 'Tutor'}</b><p>{line.text}</p></li>) : <li className="text-chat-empty">{plan ? 'Ask the tutor a question.' : 'Plan a lesson to start a text conversation.'}</li>}
+        </ol>
+        {sendError && <p className="lesson-text-error" role="alert">{sendError}</p>}
+        <form className="lesson-text-form" onSubmit={sendMessage}>
+          <label className="lesson-text-label" htmlFor="lesson-text-message">Message the tutor</label>
+          <textarea id="lesson-text-message" value={message} onChange={event => setMessage(event.target.value)} placeholder="Ask a question…" rows={2} disabled={!plan || sending} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} />
+          <button type="submit" disabled={!plan || !message.trim() || sending}>{sending ? 'Sending…' : 'Send'}</button>
+        </form>
+        <span className="lesson-text-hint">Enter to send · Shift+Enter for a new line</span>
+      </section>}
 
       {live && (
         <button
