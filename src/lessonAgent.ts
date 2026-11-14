@@ -240,15 +240,19 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
     const interruptedShape = existing.find(shape => shape.meta?.actionState === 'interrupted')
     const interruptedGeneration = interruptedShape?.meta?.generationId
     const generationId = typeof interruptedGeneration === 'string' ? interruptedGeneration : crypto.randomUUID()
-    const beatId = `diagram_${diagramId.replaceAll('-', '_')}_${generationId.replaceAll('-', '_')}`
-    return applyTeachingBeat(editor, {
-      beatId, context: 'Drawing a visual explanation.', speech: 'Drawing a visual explanation.', pauseMs: 0, waitForLearner: false,
-      placement: 'continue', anchorBeatId: '', actions: plan.actions as TeachingAction[],
-    }, {
-      lessonId: context.lessonId, checkpointIndex: context.checkpointIndex, signal: context.signal, onAction: context.onAction, onCursor: context.onCursor,
-      diagramId, generationId, origin: interruptedShape && typeof interruptedShape.meta?.originX === 'number' && typeof interruptedShape.meta?.originY === 'number'
-        ? { x: interruptedShape.meta.originX, y: interruptedShape.meta.originY } : { x: xOffset, y: yOffset },
-    })
+    const origin = interruptedShape && typeof interruptedShape.meta?.originX === 'number' && typeof interruptedShape.meta?.originY === 'number'
+      ? { x: interruptedShape.meta.originX, y: interruptedShape.meta.originY } : { x: xOffset, y: yOffset }
+    for (let start = 0; start < plan.actions.length; start += 12) {
+      await applyTeachingBeat(editor, {
+        beatId: `diagram_${diagramId.replaceAll('-', '_')}_${generationId.replaceAll('-', '')}_${start}`,
+        context: 'Drawing a visual explanation.', speech: 'Drawing a visual explanation.', pauseMs: 0, waitForLearner: false,
+        placement: 'continue', anchorBeatId: '', actions: plan.actions.slice(start, start + 12) as TeachingAction[],
+      }, {
+        lessonId: context.lessonId, checkpointIndex: context.checkpointIndex, signal: context.signal, onAction: context.onAction, onCursor: context.onCursor,
+        diagramId, generationId, origin,
+      })
+    }
+    return
   }
 
   const nodes = plan.actions.filter((action): action is Extract<DiagramAction, { _type: 'create' }> => action._type === 'create')
@@ -439,8 +443,8 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       if (!existing) {
         progress = Math.min(2, action.points.length)
         editor.createShape({
-          id, type: 'draw', x: origin.x, y: origin.y, meta: metaFor(action, 'interrupted', progress),
-          props: { color: action.color, fill: 'none', dash: 'draw', size: action.size, segments: compressLegacySegments([{ type: 'free', points: strokePoints() }]), isComplete: false, isClosed: action.closed, isPen: true, scale: 1, scaleX: 1, scaleY: 1 },
+          id, type: 'draw', x: origin.x, y: origin.y, meta: metaFor(action, progress === action.points.length ? 'complete' : 'interrupted', progress),
+          props: { color: action.color, fill: 'none', dash: 'draw', size: action.size, segments: compressLegacySegments([{ type: 'free', points: strokePoints() }]), isComplete: progress === action.points.length, isClosed: action.closed, isPen: true, scale: 1, scaleX: 1, scaleY: 1 },
         } as any)
       }
       try {
