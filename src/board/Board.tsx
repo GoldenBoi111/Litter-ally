@@ -5,6 +5,7 @@ import type { ImportedPaper } from '@/storage'
 import { PersistentTldraw } from '@/persistentCanvas'
 import { loadProjects, PROJECTS_UPDATED_EVENT, type Project, type ProjectSynthesis } from '@/projects'
 import { CARD_H, CARD_W, RELATIONS, boardShapeUtils, type Relation } from './shapes'
+import { CUT_TOTAL_MS } from './cutRope'
 
 const GRID = { cols: 4, dx: CARD_W + 90, dy: CARD_H + 120 }
 
@@ -46,6 +47,17 @@ function tie(editor: Editor, [a, b]: TLShape[]) {
   editor.select(id)
 }
 
+/** Cutting plays the snap, drop and dissolve first, then deletes. The cut mark skips undo history, so undo restores a whole string. */
+function cutString(editor: Editor, string: TLShape) {
+  editor.selectNone()
+  editor.run(() => editor.updateShape({ id: string.id, type: 'red-string', meta: { ...string.meta, cutAt: Date.now() } }), { history: 'ignore' })
+  window.setTimeout(() => {
+    if (!editor.getShape(string.id)) return
+    editor.markHistoryStoppingPoint('cut string')
+    editor.deleteShapes([string.id])
+  }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 320 : CUT_TOTAL_MS)
+}
+
 /** Floating actions for the current selection: tie two cards, or name a string's relation. */
 function SelectionActions() {
   const editor = useEditor()
@@ -60,7 +72,7 @@ function SelectionActions() {
   return (
     <div className="board-actions" role="toolbar" aria-label="String relation">
       {RELATIONS.map(r => <button key={r} aria-pressed={string.props.relation === r} onClick={() => set(string.props.relation === r ? '' : r)}>{r}</button>)}
-      <button onClick={() => editor.deleteShapes([string.id])}>Cut string</button>
+      <button onClick={() => cutString(editor, string)}>Cut string</button>
     </div>
   )
 }

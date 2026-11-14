@@ -87,8 +87,26 @@
 .board-connections li i { padding: 0 3px; color: var(--desk-coral, #b4534a); font-style: normal; }
 .board-connections li small { display: block; margin-top: 3px; font: 11px/1.4 var(--font-family-body, system-ui); color: var(--ll-ink-soft); }
 
+/* Cutting: the string snaps in the middle and both halves drop and hang from their pins (simulated in cutRope.ts).
+   The label falls away with the cut; once the halves hang, they fray into fibres and a noise filter pulls them apart. */
+.board-string.is-cut { pointer-events: none; }
+.is-cut .board-string-tag > * { animation: tag-fall 650ms cubic-bezier(.5, 0, .9, .5) forwards; }
+.is-dissolving .string-thread, .is-dissolving .string-twist { animation: string-fray 700ms linear forwards; }
+.is-dissolving .string-shadow { animation: string-fade 380ms ease-out forwards; }
+.is-dissolving .string-pin { transform-box: fill-box; transform-origin: center; animation: pin-lift 480ms 260ms var(--ease-out) forwards; }
+@keyframes string-fray {
+  0% { stroke-dasharray: 1 0; opacity: 1; }
+  25% { stroke-dasharray: 0.03 0.005; opacity: 1; }
+  60% { stroke-dasharray: 0.008 0.016; stroke-width: 1.8; opacity: 0.85; }
+  100% { stroke-dasharray: 0.0015 0.03; stroke-width: 1; opacity: 0; }
+}
+@keyframes string-fade { to { opacity: 0; } }
+@keyframes pin-lift { 40% { scale: 1.15; opacity: 1; } to { scale: 0.4; opacity: 0; } }
+@keyframes tag-fall { to { opacity: 0; translate: 0 80px; rotate: 14deg; } }
+
 @media (prefers-reduced-motion: reduce) {
   .string-fresh, .string-twist.string-fresh, .board-string-tag > * { animation: none; stroke-dashoffset: 0; opacity: 0.8; }
+  .is-cut .string-thread, .is-cut .string-twist, .is-cut .string-shadow, .is-cut .string-pin, .is-cut .board-string-tag > * { animation: string-fade 300ms ease-out forwards; }
   .board-card { transition: none; }
 }
 .board-string .string-thread { transition: stroke-width 120ms var(--ease-out); }
