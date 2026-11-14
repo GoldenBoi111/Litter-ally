@@ -1,0 +1,62 @@
+{
+  "package.json": {
+    "mtime": 1794278749.6048973,
+    "seen": 1794279720.5130672,
+    "ast_hash": "868720dcfb3c72acf0a38595e30d0166",
+    "semantic_hash": "868720dcfb3c72acf0a38595e30d0166"
+  },
+  "server/index.mjs": {
+    "mtime": 1794278749.6068954,
+    "seen": 1794279720.513081,
+    "ast_hash": "f2b361ba93ce8096bac204aa414e662b",
+    "semantic_hash": "f2b361ba93ce8096bac204aa414e662b"
+  },
+  "src/App.tsx": {
+    "mtime": 1794280304.3251157,
+    "seen": 1794280350.798237,
+    "ast_hash": "c822b392deaccc2e65b4368085cd9037",
+    "semantic_hash": "c822b392deaccc2e65b4368085cd9037"
+  },
+  "src/main.tsx": {
+    "mtime": 1794278111.4310706,
+    "seen": 1794279720.5130916,
+    "ast_hash": "8a4c4c9caa1c3b212bd75e54dab96e9b",
+    "semantic_hash": "8a4c4c9caa1c3b212bd75e54dab96e9b"
+  },
+  "src/storage.ts": {
+    "mtime": 1794273880.777795,
+    "seen": 1794279720.513095,
+    "ast_hash": "542e4d8083b8fff7358caa4c3cefc0c9",
+    "semantic_hash": "542e4d8083b8fff7358caa4c3cefc0c9"
+  },
+  "src/vite-env.d.ts": {
+    "mtime": 1794272931.7751842,
+    "seen": 1794279720.5130985,
+    "ast_hash": "0352474ba2918efe13895edbc3780d94",
+    "semantic_hash": "0352474ba2918efe13895edbc3780d94"
+  },
+  "tsconfig.json": {
+    "mtime": 1794272735.9860325,
+    "seen": 1794279720.5131023,
+    "ast_hash": "3e252d49c6151c9b49406d4bc16c03ef",
+    "semantic_hash": "3e252d49c6151c9b49406d4bc16c03ef"
+  },
+  "vite.config.ts": {
+    "mtime": 1794274098.3875668,
+    "seen": 1794279720.5131059,
+    "ast_hash": "f40727231c056d075eedcd012a3889ae",
+    "semantic_hash": "f40727231c056d075eedcd012a3889ae"
+  },
+  "server/agent-actions.mjs": {
+    "mtime": 1794280321.170464,
+    "seen": 1794280350.7965336,
+    "ast_hash": "a2cb1f946dabf02d134dfa6f0f55670b",
+    "semantic_hash": "a2cb1f946dabf02d134dfa6f0f55670b"
+  },
+  "server/agent-actions.test.mjs": {
+    "mtime": 1794280321.170464,
+    "seen": 1794280350.7965412,
+    "ast_hash": "16d30cbea95cff56856f39ec43924b39",
+    "semantic_hash": "16d30cbea95cff56856f39ec43924b39"
+  }
+}
