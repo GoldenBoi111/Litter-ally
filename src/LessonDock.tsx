@@ -45,7 +45,7 @@ function isTyping(target: EventTarget | null) {
 }
 
 /** Lesson controls (top of the canvas, clear of tldraw's bottom toolbar), live captions, and hold-Space-to-talk. */
-export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, micMuted, transcript, onBuild, onStart, onPause, onResume, onStop, onSelectCheckpoint, onTalkStart, onTalkEnd }: {
+export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, micMuted, transcript, onBuild, onAsk, onStart, onPause, onResume, onStop, onSelectCheckpoint, onTalkStart, onTalkEnd }: {
   plan: TeachingPlan | null
   planBusy: boolean
   checkpointIndex: number
@@ -54,6 +54,7 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
   micMuted: boolean
   transcript: Array<{ role: 'Tutor' | 'You'; text: string }>
   onBuild: () => void
+  onAsk: (question: string) => Promise<void>
   onStart: () => void
   onPause: () => void
   onResume: () => void
@@ -63,6 +64,10 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
   onTalkEnd: () => void
 }) {
   const [captions, setCaptions] = useState(() => localStorage.getItem(CC_KEY) !== 'off')
+  const [textOpen, setTextOpen] = useState(false)
+  const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState('')
   useEffect(() => { localStorage.setItem(CC_KEY, captions ? 'on' : 'off') }, [captions])
 
   const live = ['connecting', 'listening', 'speaking', 'drawing'].includes(status)
@@ -98,6 +103,15 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
   const drag = useDraggable()
   const total = plan?.sessions.length || 0
   const checkpoint = plan?.sessions[checkpointIndex]
+  const sendMessage = async (event: React.FormEvent) => {
+    event.preventDefault()
+    const question = message.trim()
+    if (!question || sending || !plan) return
+    setSending(true); setSendError('')
+    try { await onAsk(question); setMessage('') }
+    catch (error) { setSendError(error instanceof Error ? error.message : 'Message could not be sent. Try again.') }
+    finally { setSending(false) }
+  }
 
   return (
     <>
@@ -120,7 +134,21 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
         )}
         <span className="dock-sep" />
         <button aria-pressed={captions} title="Captions" onClick={() => setCaptions(c => !c)}>CC</button>
+        <button aria-expanded={textOpen} aria-controls="lesson-text-chat" onClick={() => setTextOpen(open => !open)}>Text</button>
       </div>
+
+      {textOpen && <section id="lesson-text-chat" className="lesson-text-chat" aria-label="Text conversation with tutor">
+        <ol className="lesson-text-history" role="log" aria-live="polite">
+          {transcript.length ? transcript.map((line, index) => <li className={line.role === 'You' ? 'from-learner' : ''} key={`${index}-${line.text}`}><b>{line.role === 'You' ? 'You' : 'Tutor'}</b><p>{line.text}</p></li>) : <li className="text-chat-empty">{plan ? 'Ask the tutor a question.' : 'Plan a lesson to start a text conversation.'}</li>}
+        </ol>
+        {sendError && <p className="lesson-text-error" role="alert">{sendError}</p>}
+        <form className="lesson-text-form" onSubmit={sendMessage}>
+          <label className="lesson-text-label" htmlFor="lesson-text-message">Message the tutor</label>
+          <textarea id="lesson-text-message" value={message} onChange={event => setMessage(event.target.value)} placeholder="Ask a question…" rows={2} disabled={!plan || sending} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() } }} />
+          <button type="submit" disabled={!plan || !message.trim() || sending}>{sending ? 'Sending…' : 'Send'}</button>
+        </form>
+        <span className="lesson-text-hint">Enter to send · Shift+Enter for a new line</span>
+      </section>}
 
       {live && (
         <button
