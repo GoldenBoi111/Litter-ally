@@ -1,10 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { TeachingPlan } from './lessonAgent'
 import type { TutorStatus } from './hybridTutor'
 
 const CC_KEY = 'litterally-captions'
 
-/** Minimal floating lesson controls plus live captions of what the tutor is saying. Replaces the tutor side panel. */
+function isTyping(target: EventTarget | null) {
+  const el = target as HTMLElement | null
+  return !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))
+}
+
+/** Lesson controls (top of the canvas, clear of tldraw's bottom toolbar), live captions, and hold-Space-to-talk. */
 export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, micMuted, transcript, onBuild, onStart, onPause, onResume, onStop, onSelectCheckpoint, onTalkStart, onTalkEnd }: {
   plan: TeachingPlan | null
   planBusy: boolean
@@ -25,18 +30,41 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
   const [captions, setCaptions] = useState(() => localStorage.getItem(CC_KEY) !== 'off')
   useEffect(() => { localStorage.setItem(CC_KEY, captions ? 'on' : 'off') }, [captions])
 
-  const last = [...transcript].reverse().find(line => line.role === 'Tutor')
   const live = ['connecting', 'listening', 'speaking', 'drawing'].includes(status)
+  const talking = live && !micMuted
+  const spaceHeld = useRef(false)
+  const latest = useRef({ live, onTalkStart, onTalkEnd })
+  latest.current = { live, onTalkStart, onTalkEnd }
+
+  // Hold Space anywhere on the lesson to talk; it also cuts the tutor off mid-sentence.
+  // Capture phase so tldraw's own Space (hand tool) never sees it.
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || isTyping(e.target) || !latest.current.live) return
+      e.preventDefault(); e.stopPropagation()
+      if (e.repeat || spaceHeld.current) return
+      spaceHeld.current = true
+      latest.current.onTalkStart()
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || !spaceHeld.current) return
+      e.preventDefault(); e.stopPropagation()
+      spaceHeld.current = false
+      latest.current.onTalkEnd()
+    }
+    const blur = () => { if (spaceHeld.current) { spaceHeld.current = false; latest.current.onTalkEnd() } }
+    window.addEventListener('keydown', down, true)
+    window.addEventListener('keyup', up, true)
+    window.addEventListener('blur', blur)
+    return () => { window.removeEventListener('keydown', down, true); window.removeEventListener('keyup', up, true); window.removeEventListener('blur', blur) }
+  }, [])
+
+  const last = [...transcript].reverse().find(line => line.role === 'Tutor')
   const total = plan?.sessions.length || 0
   const checkpoint = plan?.sessions[checkpointIndex]
 
   return (
     <>
-      {captions && (last || detail) && (
-        <div className="lesson-captions" role="log" aria-live="polite" aria-label="Tutor captions">
-          {last ? <p>{last.text}</p> : <p className="lesson-captions-detail">{detail}</p>}
-        </div>
-      )}
       <div className="lesson-dock" role="toolbar" aria-label="Lesson controls">
         {!plan ? (
           <button className="dock-primary" disabled={planBusy} onClick={onBuild}>{planBusy ? 'Planning lesson…' : 'Plan this lesson'}</button>
@@ -49,17 +77,35 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
             {status === 'paused' ? <button className="dock-primary" onClick={onResume}>Resume</button>
               : live ? <button className="dock-primary" onClick={onPause}>Pause</button>
               : <button className="dock-primary" onClick={onStart}>Start</button>}
-            {live && <button
-              aria-label="Hold to talk" title="Hold to talk"
-              className={micMuted ? '' : 'is-on'}
-              onPointerDown={onTalkStart} onPointerUp={onTalkEnd} onPointerLeave={() => { if (!micMuted) onTalkEnd() }}
-            >🎙</button>}
             {(live || status === 'paused') && <button aria-label="Stop" onClick={onStop}>■</button>}
           </>
         )}
         <span className="dock-sep" />
         <button aria-pressed={captions} title="Captions" onClick={() => setCaptions(c => !c)}>CC</button>
       </div>
+
+      {live && (
+        <button
+          className={`talk-pill ${talking ? 'is-talking' : ''} ${status === 'speaking' ? 'tutor-speaking' : ''}`}
+          aria-label="Hold to talk (or hold the Space bar)"
+          onPointerDown={e => { e.preventDefault(); onTalkStart() }}
+          onPointerUp={onTalkEnd}
+          onPointerLeave={() => { if (talking && !spaceHeld.current) onTalkEnd() }}
+        >
+          <span className="talk-orb" aria-hidden="true">
+            <i /><i /><i /><i /><i />
+          </span>
+          {talking
+            ? <span className="talk-copy"><b>Listening…</b> release to send</span>
+            : <span className="talk-copy"><span className="keycap">Space</span><span><b>Hold to talk</b>{status === 'speaking' ? ' · cuts in anytime' : ' · just speak naturally'}</span></span>}
+        </button>
+      )}
+
+      {captions && (last || detail) && (
+        <div className={`lesson-captions ${live ? 'with-talk' : ''}`} role="log" aria-live="polite" aria-label="Tutor captions">
+          {last ? <p>{last.text}</p> : <p className="lesson-captions-detail">{detail}</p>}
+        </div>
+      )}
     </>
   )
 }

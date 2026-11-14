@@ -72,6 +72,21 @@
 }
 .board-empty button:active { transform: scale(0.97); }
 
+.board-connections {
+  position: absolute; top: 14px; right: 14px; z-index: 300; width: min(320px, calc(100% - 28px)); max-height: 44%; overflow: auto;
+  padding: 12px; background: var(--desk-card, #fffdf9); border: 2px solid var(--desk-stroke, #2d2d2a);
+  border-radius: 12px 4px 10px 5px / 5px 10px 4px 12px; box-shadow: var(--desk-shadow);
+}
+.board-connections h2 { margin: 0 0 6px; font: 700 18px var(--font-script); color: var(--ll-ink); }
+.board-connections > p { margin: 0 0 8px; font: 12px/1.45 var(--font-family-body, system-ui); color: var(--ll-ink-soft); }
+.board-connections ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.board-connections li button { width: 100%; padding: 7px 8px; text-align: left; background: transparent; color: var(--ll-ink); border: 1px solid color-mix(in srgb, var(--ll-ink) 15%, transparent); border-radius: 5px; cursor: pointer; }
+.board-connections li button:hover { background: color-mix(in srgb, var(--desk-highlight, #fef08a) 38%, transparent); }
+.board-connections li button:focus-visible { outline: 2px solid var(--ll-ink); outline-offset: 2px; }
+.board-connections li span { display: block; font: 12px/1.4 var(--font-family-body, system-ui); }
+.board-connections li i { padding: 0 3px; color: var(--desk-coral, #b4534a); font-style: normal; }
+.board-connections li small { display: block; margin-top: 3px; font: 11px/1.4 var(--font-family-body, system-ui); color: var(--ll-ink-soft); }
+
 @media (prefers-reduced-motion: reduce) {
   .string-fresh, .string-twist.string-fresh, .board-string-tag > * { animation: none; stroke-dashoffset: 0; opacity: 0.8; }
   .board-card { transition: none; }
