@@ -12,12 +12,21 @@ import av
 import numpy as np
 from aiohttp import web
 from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
-from faster_whisper import WhisperModel
-from voice_rtc_config import require_loopback_bind_host
+from voice_rtc_config import require_loopback_bind_host, stt_settings
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("voice-rtc")
-MODEL = WhisperModel(os.getenv("LOCAL_STT_MODEL", "base.en"), device="cpu", compute_type="int8")
+STT_PROVIDER, STT_MODEL = stt_settings(os.getenv("LOCAL_STT_PROVIDER"), os.getenv("LOCAL_STT_MODEL"))
+if STT_PROVIDER == "parakeet":
+    # NVIDIA Parakeet TDT 0.6B (int8 ONNX): more accurate than Whisper on English and ~3x faster here on CPU.
+    import onnx_asr
+
+    MODEL = onnx_asr.load_model(STT_MODEL, quantization="int8", providers=["CPUExecutionProvider"])
+else:
+    from faster_whisper import WhisperModel
+
+    MODEL = WhisperModel(STT_MODEL, device="cpu", compute_type="int8")
+log.info("Speech-to-text: %s (%s)", STT_MODEL, STT_PROVIDER)
 TTS_URL = os.getenv("LOCAL_TTS_URL", "http://127.0.0.1:8187").rstrip("/") + "/v1/audio/speech"
 TTS_MODEL = os.getenv("LOCAL_TTS_MODEL", "qwen3-custom")
 TTS_VOICE = os.getenv("LOCAL_TTS_VOICE", "Aiden")
@@ -53,8 +62,13 @@ def origin_allowed(origin):
 
 def transcribe(samples, prompt):
     started = time.perf_counter()
-    segments, _ = MODEL.transcribe(samples, language="en", beam_size=3, initial_prompt=prompt or None, vad_filter=False)
-    return {"type": "transcript", "text": " ".join(segment.text.strip() for segment in segments).strip(), "latencyMs": round((time.perf_counter() - started) * 1000)}
+    if STT_PROVIDER == "parakeet":
+        # Parakeet has no text prompt; it already punctuates and handles long audio in one pass.
+        text = MODEL.recognize(np.asarray(samples, dtype=np.float32), sample_rate=16_000)
+    else:
+        segments, _ = MODEL.transcribe(samples, language="en", beam_size=3, initial_prompt=prompt or None, vad_filter=False)
+        text = " ".join(segment.text.strip() for segment in segments)
+    return {"type": "transcript", "text": str(text).strip(), "latencyMs": round((time.perf_counter() - started) * 1000)}
 
 
 async def transcribe_segment(channel, samples, prompt, turn):
@@ -326,7 +340,7 @@ async def on_shutdown(_app):
 
 
 async def health(_request):
-    return web.json_response({"status": "ok", "model": os.getenv("LOCAL_STT_MODEL", "base.en")})
+    return web.json_response({"status": "ok", "provider": STT_PROVIDER, "model": STT_MODEL})
 
 
 app = web.Application(middlewares=[cors], client_max_size=6_000_000)

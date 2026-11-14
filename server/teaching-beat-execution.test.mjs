@@ -23,6 +23,7 @@ test('installed tldraw schema accepts the native compressed pen segments', () =>
 
 function fakeEditor(initial = []) {
   const shapes = new Map(initial.map(shape => [shape.id, shape]))
+  const zooms = []
   return {
     shapes,
     getCurrentPageShapes: () => [...shapes.values()],
@@ -34,7 +35,9 @@ function fakeEditor(initial = []) {
     },
     deleteShapes: ids => ids.forEach(id => shapes.delete(typeof id === 'string' ? id : id.id)),
     getShapesPageBounds: ids => ids.length ? { x: 0, y: 0, w: 400, h: 200 } : null,
-    zoomToBounds: () => undefined,
+    zoomToBounds: bounds => { zooms.push(bounds) },
+    zooms,
+    getViewportPageBounds: () => ({ minX: 0, minY: 0, maxX: 1600, maxY: 900 }),
     getSelectionPageBounds: () => null,
     getShapePageBounds: shape => shape.bounds || { x: 0, y: 0, w: 100, h: 100 },
     getShapeUtil: () => ({ getText: shape => shape.text || '' }),
@@ -58,6 +61,20 @@ test('animates a beat into stable completed native shapes', async () => {
   assert.equal(editor.shapes.size, 2)
   assert.deepEqual(result.actions.map(action => action.state), ['complete', 'complete'])
   assert.ok([...editor.shapes.values()].some(shape => shape.type === 'draw' && shape.props.isComplete))
+})
+
+test('continue placement builds on the previous beat and frames the area before drawing', async () => {
+  const editor = fakeEditor()
+  const signal = new AbortController().signal
+  await applyTeachingBeat(editor, beat(4), { lessonId: 'paper', checkpointIndex: 0, signal })
+  const first = [...editor.shapes.values()][0].meta
+  assert.equal(editor.zooms.length, 1, 'off-screen drawing area is brought into view first')
+  await applyTeachingBeat(editor, { ...beat(4), beatId: 'derive_two', placement: 'continue' }, { lessonId: 'paper', checkpointIndex: 0, signal })
+  const second = [...editor.shapes.values()].filter(shape => shape.meta.beatId === 'derive_two')
+  assert.ok(second.length && second.every(shape => shape.meta.originX === first.originX && shape.meta.originY === first.originY))
+  await applyTeachingBeat(editor, { ...beat(4), beatId: 'derive_three' }, { lessonId: 'paper', checkpointIndex: 0, signal })
+  const third = [...editor.shapes.values()].find(shape => shape.meta.beatId === 'derive_three').meta
+  assert.ok(third.originY > first.originY, 'new-section starts a fresh area')
 })
 
 test('draws a diagram with more actions than a live teaching beat', async () => {
