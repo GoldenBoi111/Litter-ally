@@ -74,7 +74,12 @@ export function validateTeachingPlan(value, pageCount) {
       checkpoint.concepts = checkpoint.conceptIds.map(id => byId.get(id).name)
       for (const id of checkpoint.conceptIds) if (!owners.has(id)) owners.set(id, index)
     }
-    if (orderedIds.some(id => !owners.has(id))) throw new Error('Every mapped concept must be taught in a checkpoint.')
+    // A concept no checkpoint teaches is dropped (and removed as a prerequisite) instead of rejecting the whole plan.
+    const untaught = new Set(orderedIds.filter(id => !owners.has(id)))
+    if (untaught.size) {
+      value.conceptMap = value.conceptMap.filter(concept => !untaught.has(concept.id))
+      for (const concept of value.conceptMap) concept.prerequisites = concept.prerequisites.filter(prerequisite => !untaught.has(prerequisite.id))
+    }
 
     const sessionIndegree = new Map(value.sessions.map((_, index) => [index, 0]))
     const sessionDependents = new Map(value.sessions.map((_, index) => [index, new Set()]))
