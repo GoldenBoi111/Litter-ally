@@ -1,0 +1,504 @@
+{
+  "communities": {
+    "0": [
+      "ref_node_assert",
+      "ref_node_dns",
+      "ref_node_http",
+      "ref_node_https",
+      "ref_node_path",
+      "ref_node_readline",
+      "ref_node_test",
+      "server_agent_actions",
+      "server_agent_actions_colors",
+      "server_agent_actions_diagramplanschema",
+      "server_agent_actions_isnumber",
+      "server_agent_actions_pointschema",
+      "server_agent_actions_shapekinds",
+      "server_agent_actions_test",
+      "server_agent_actions_test_valid",
+      "server_agent_actions_validatediagramplan",
+      "server_agent_actions_validid",
+      "server_index",
+      "server_index_app",
+      "server_index_creatediagramplan",
+      "server_index_createrealtimeclientsecret",
+      "server_index_createteachingplan",
+      "server_index_extractpdf",
+      "server_index_fetchremotepdf",
+      "server_index_getsttworker",
+      "server_index_normalizesource",
+      "server_index_openaikey",
+      "server_index_ortdist",
+      "server_index_pinnedpublicaddress",
+      "server_index_port",
+      "server_index_publicaddress",
+      "server_index_requestpdf",
+      "server_index_responsetext",
+      "server_index_sttpending",
+      "server_index_teachingplanschema",
+      "server_index_transcribespeech",
+      "server_index_upload",
+      "server_index_vaddist",
+      "server_index_voicetools",
+      "server_learning",
+      "server_learning_createanswerreview",
+      "server_learning_createpracticequestion",
+      "server_learning_outputtext",
+      "server_learning_practiceschema",
+      "server_learning_reviewschema",
+      "server_learning_statuses",
+      "server_learning_structuredresponse",
+      "server_lesson_plan",
+      "server_lesson_plan_test",
+      "server_lesson_plan_validateteachingplan",
+      "server_paper_text_test",
+      "server_voice",
+      "server_voice_safevoiceevent",
+      "server_voice_test",
+      "server_voice_validatevoicerequest",
+      "server_voice_validspeechtext",
+      "server_voice_validvoiceaudio",
+      "src_paper_text",
+      "src_paper_text_readpaperpage"
+    ],
+    "1": [
+      "ref_tldraw",
+      "src_app",
+      "src_app_apiimportresult",
+      "src_app_app",
+      "src_app_errormessage",
+      "src_app_importresult",
+      "src_app_initializepapercanvas",
+      "src_app_intakepanel",
+      "src_app_intakepanelprops",
+      "src_app_readapiresult",
+      "src_app_readteachingplan",
+      "src_learning",
+      "src_learning_answerreview",
+      "src_learning_assessanswer",
+      "src_learning_learningstatus",
+      "src_learning_practicecheckpoint",
+      "src_learning_practicequestion",
+      "src_learning_readresult",
+      "src_learning_requestpracticequestion",
+      "src_lessonagent",
+      "src_lessonagent_applydiagramplan",
+      "src_lessonagent_buildcheckpointbrief",
+      "src_lessonagent_diagramaction",
+      "src_lessonagent_diagrambrief",
+      "src_lessonagent_diagramplan",
+      "src_lessonagent_getselectioncontext",
+      "src_lessonagent_lessoncheckpoint",
+      "src_lessonagent_requestdiagramplan",
+      "src_lessonagent_teachingplan",
+      "src_lessonagent_wait",
+      "src_pdfimport",
+      "src_pdfimport_finishpdfextraction",
+      "src_pdfimport_pdfextraction",
+      "src_pdfpages",
+      "src_pdfpages_placepdfpage",
+      "src_storage",
+      "src_storage_importedpaper",
+      "src_storage_knowledgeedge",
+      "src_storage_knowledgegraph",
+      "src_storage_knowledgenode",
+      "src_storage_knowledgenodeid",
+      "src_storage_learningstate",
+      "src_storage_listpapers",
+      "src_storage_loadknowledgegraph",
+      "src_storage_openlibrary",
+      "src_storage_recordknowledgereview",
+      "src_storage_savelearningoutcome",
+      "src_storage_savepaper",
+      "src_tutorpanel",
+      "src_tutorpanel_statuslabels",
+      "src_tutorpanel_tutorpanel",
+      "src_tutorpanel_tutorpanelprops"
+    ],
+    "2": [
+      "ref_zod",
+      "src_hybridtutor",
+      "src_hybridtutor_hybridtutor",
+      "src_hybridtutor_hybridtutor_ask",
+      "src_hybridtutor_hybridtutor_askaboutselection",
+      "src_hybridtutor_hybridtutor_close",
+      "src_hybridtutor_hybridtutor_connect",
+      "src_hybridtutor_hybridtutor_constructor",
+      "src_hybridtutor_hybridtutor_enqueuespeech",
+      "src_hybridtutor_hybridtutor_executetool",
+      "src_hybridtutor_hybridtutor_interrupt",
+      "src_hybridtutor_hybridtutor_isbusy",
+      "src_hybridtutor_hybridtutor_pause",
+      "src_hybridtutor_hybridtutor_playpcm",
+      "src_hybridtutor_hybridtutor_recordfirstphrase",
+      "src_hybridtutor_hybridtutor_respond",
+      "src_hybridtutor_hybridtutor_resume",
+      "src_hybridtutor_hybridtutor_speak",
+      "src_hybridtutor_hybridtutor_startpendingresponse",
+      "src_hybridtutor_hybridtutor_transcribe",
+      "src_hybridtutor_hybridtutor_trimhistory",
+      "src_hybridtutor_hybridtutor_updatecheckpointbrief",
+      "src_hybridtutor_inputitem",
+      "src_hybridtutor_recordmetric",
+      "src_hybridtutor_takespeakablephrases",
+      "src_lessonagent_checkpointbrief",
+      "src_lessonagent_formatcheckpointbrief",
+      "src_lessonagent_selectioncontext",
+      "src_realtimetutor",
+      "src_realtimetutor_realtimetutor",
+      "src_realtimetutor_realtimetutor_ask",
+      "src_realtimetutor_realtimetutor_askaboutselection",
+      "src_realtimetutor_realtimetutor_close",
+      "src_realtimetutor_realtimetutor_connect",
+      "src_realtimetutor_realtimetutor_constructor",
+      "src_realtimetutor_realtimetutor_pause",
+      "src_realtimetutor_realtimetutor_resume",
+      "src_realtimetutor_realtimetutor_updatecheckpointbrief",
+      "src_realtimetutor_transcript",
+      "src_realtimetutor_tutorcallbacks",
+      "src_realtimetutor_tutorcontroller",
+      "src_realtimetutor_tutorcontroller_ask",
+      "src_realtimetutor_tutorcontroller_askaboutselection",
+      "src_realtimetutor_tutorcontroller_close",
+      "src_realtimetutor_tutorcontroller_connect",
+      "src_realtimetutor_tutorcontroller_pause",
+      "src_realtimetutor_tutorcontroller_resume",
+      "src_realtimetutor_tutorcontroller_updatecheckpointbrief",
+      "src_realtimetutor_tutorstatus",
+      "src_voice_turn",
+      "src_voice_turn_shouldinterruptonspeechstart"
+    ],
+    "3": [
+      "ref_node_child_process",
+      "ref_node_fs",
+      "ref_node_perf_hooks",
+      "scripts_benchmark_local_voice",
+      "scripts_benchmark_local_voice_asrpayload",
+      "scripts_benchmark_local_voice_audio",
+      "scripts_benchmark_local_voice_firstsseaudio",
+      "scripts_benchmark_local_voice_percentile",
+      "scripts_benchmark_local_voice_runs",
+      "scripts_benchmark_local_voice_stt",
+      "scripts_benchmark_local_voice_summary",
+      "scripts_benchmark_local_voice_tts",
+      "scripts_benchmark_voice",
+      "scripts_benchmark_voice_audio",
+      "scripts_benchmark_voice_measurements",
+      "scripts_benchmark_voice_output",
+      "scripts_benchmark_voice_percentile",
+      "scripts_benchmark_voice_report",
+      "scripts_benchmark_voice_runs",
+      "scripts_benchmark_voice_sseevents",
+      "scripts_benchmark_voice_wavasfloat32",
+      "scripts_benchmark_voice_wavpath"
+    ],
+    "4": [
+      "tsconfig",
+      "tsconfig_compileroptions",
+      "tsconfig_compileroptions_allowimportingtsextensions",
+      "tsconfig_compileroptions_isolatedmodules",
+      "tsconfig_compileroptions_jsx",
+      "tsconfig_compileroptions_lib",
+      "tsconfig_compileroptions_module",
+      "tsconfig_compileroptions_moduleresolution",
+      "tsconfig_compileroptions_noemit",
+      "tsconfig_compileroptions_nounusedlocals",
+      "tsconfig_compileroptions_nounusedparameters",
+      "tsconfig_compileroptions_resolvejsonmodule",
+      "tsconfig_compileroptions_skiplibcheck",
+      "tsconfig_compileroptions_strict",
+      "tsconfig_compileroptions_target",
+      "tsconfig_compileroptions_usedefineforclassfields",
+      "tsconfig_include"
+    ],
+    "5": [
+      "package",
+      "package_devdependencies",
+      "package_devdependencies_astryxdesign_cli",
+      "package_devdependencies_types_react",
+      "package_devdependencies_types_react_dom",
+      "package_devdependencies_typescript",
+      "package_name",
+      "package_private",
+      "package_type",
+      "package_version",
+      "ref_astryxdesign_cli",
+      "ref_types_react",
+      "ref_types_react_dom",
+      "ref_typescript"
+    ],
+    "6": [
+      "package_dependencies",
+      "package_dependencies_concurrently",
+      "package_dependencies_express",
+      "package_dependencies_ipaddr_js",
+      "package_dependencies_multer",
+      "package_dependencies_openai_agents",
+      "package_dependencies_ricky0123_vad_web",
+      "package_dependencies_tldraw",
+      "ref_concurrently",
+      "ref_express",
+      "ref_ipaddr_js",
+      "ref_multer",
+      "ref_openai_agents",
+      "ref_ricky0123_vad_web"
+    ],
+    "7": [
+      "base64",
+      "faster_whisper",
+      "json",
+      "math",
+      "numpy",
+      "os",
+      "pathlib",
+      "server_faster_whisper_worker",
+      "struct",
+      "sys",
+      "time",
+      "tts_benchmark_scripts_validate_outputs",
+      "wave"
+    ],
+    "8": [
+      "package_scripts",
+      "package_scripts_app_local",
+      "package_scripts_build",
+      "package_scripts_dev",
+      "package_scripts_preview",
+      "package_scripts_test",
+      "package_scripts_voice_benchmark",
+      "package_scripts_voice_benchmark_local",
+      "package_scripts_voice_setup",
+      "package_scripts_voice_start",
+      "package_scripts_voice_stop"
+    ],
+    "9": [
+      "package_dependencies_astryxdesign_core",
+      "package_dependencies_react",
+      "package_dependencies_react_dom",
+      "ref_astryxdesign_core",
+      "ref_react",
+      "ref_react_dom",
+      "src_intake",
+      "src_main",
+      "src_style"
+    ],
+    "10": [
+      "package_dependencies_pdfjs_dist",
+      "package_dependencies_tesseract_js",
+      "ref_pdfjs_dist",
+      "ref_tesseract_js",
+      "src_ocr",
+      "src_ocr_recognizepdfpages"
+    ],
+    "11": [
+      "package_dependencies_vite",
+      "package_dependencies_vitejs_plugin_react",
+      "ref_vite",
+      "ref_vitejs_plugin_react",
+      "vite_config"
+    ],
+    "12": [
+      "scripts_run_paper_board",
+      "scripts_run_paper_board_test_portavailable"
+    ],
+    "13": [
+      "scripts_setup_voice",
+      "scripts_setup_voice_get_verifiedfile"
+    ],
+    "14": [
+      "tts_benchmark_scripts_setup",
+      "tts_benchmark_scripts_setup_get_verifiedfile"
+    ],
+    "15": [
+      "scripts_start_voice_services"
+    ],
+    "16": [
+      "scripts_stop_voice_services"
+    ],
+    "17": [
+      "src_paper_text_d"
+    ],
+    "18": [
+      "src_vite_env_d"
+    ],
+    "19": [
+      "src_voice_turn_d"
+    ],
+    "20": [
+      "tts_benchmark_scripts_synthesize_breeze"
+    ],
+    "21": [
+      "tts_benchmark_scripts_synthesize_qwen"
+    ]
+  },
+  "cohesion": {
+    "0": 0.056107539450613676,
+    "1": 0.09125188536953242,
+    "2": 0.08549019607843138,
+    "3": 0.1038961038961039,
+    "4": 0.11764705882352941,
+    "5": 0.18681318681318682,
+    "6": 0.14285714285714285,
+    "7": 0.15384615384615385,
+    "8": 0.18181818181818182,
+    "9": 0.2222222222222222,
+    "10": 0.3333333333333333,
+    "11": 0.4,
+    "12": 1.0,
+    "13": 1.0,
+    "14": 1.0,
+    "15": 1.0,
+    "16": 1.0,
+    "17": 1.0,
+    "18": 1.0,
+    "19": 1.0,
+    "20": 1.0,
+    "21": 1.0
+  },
+  "gods": [
+    {
+      "id": "src_app_app",
+      "label": "App()",
+      "degree": 26
+    },
+    {
+      "id": "src_hybridtutor_hybridtutor",
+      "label": "HybridTutor",
+      "degree": 22
+    },
+    {
+      "id": "tsconfig_compileroptions",
+      "label": "compilerOptions",
+      "degree": 15
+    },
+    {
+      "id": "src_lessonagent_checkpointbrief",
+      "label": "CheckpointBrief",
+      "degree": 13
+    },
+    {
+      "id": "src_lessonagent_formatcheckpointbrief",
+      "label": "formatCheckpointBrief()",
+      "degree": 12
+    },
+    {
+      "id": "src_realtimetutor_tutorcontroller",
+      "label": "TutorController",
+      "degree": 11
+    },
+    {
+      "id": "package_scripts",
+      "label": "scripts",
+      "degree": 11
+    },
+    {
+      "id": "src_realtimetutor_realtimetutor",
+      "label": "RealtimeTutor",
+      "degree": 10
+    },
+    {
+      "id": "src_hybridtutor_recordmetric",
+      "label": "recordMetric()",
+      "degree": 8
+    },
+    {
+      "id": "server_agent_actions_validatediagramplan",
+      "label": "validateDiagramPlan()",
+      "degree": 6
+    }
+  ],
+  "surprises": [
+    {
+      "source": "App()",
+      "target": "RealtimeTutor",
+      "source_files": [
+        "src/App.tsx",
+        "src/realtimeTutor.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    },
+    {
+      "source": "App()",
+      "target": "readPaperPage()",
+      "source_files": [
+        "src/App.tsx",
+        "src/paper-text.mjs"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    },
+    {
+      "source": "App()",
+      "target": "formatCheckpointBrief()",
+      "source_files": [
+        "src/App.tsx",
+        "src/lessonAgent.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    },
+    {
+      "source": "HybridTutor",
+      "target": "CheckpointBrief",
+      "source_files": [
+        "src/hybridTutor.ts",
+        "src/lessonAgent.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "references",
+      "why": "cross-file semantic connection"
+    },
+    {
+      "source": "HybridTutor",
+      "target": "TutorController",
+      "source_files": [
+        "src/hybridTutor.ts",
+        "src/realtimeTutor.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "implements",
+      "why": "cross-file semantic connection"
+    }
+  ],
+  "questions": [
+    {
+      "type": "bridge_node",
+      "question": "Why does `pdfjs-dist` connect `pdfjs-dist` to `index.mjs`, `compilerOptions`, `vite`?",
+      "why": "High betweenness centrality (0.162) - this node is a cross-community bridge."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `index.mjs` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.056107539450613676 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `App()` connect `compilerOptions` to `index.mjs`, `main.tsx`, `package.json`?",
+      "why": "High betweenness centrality (0.065) - this node is a cross-community bridge."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `compilerOptions` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.09125188536953242 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `scripts` connect `scripts` to `vite`?",
+      "why": "High betweenness centrality (0.058) - this node is a cross-community bridge."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `package.json` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.08549019607843138 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `dependencies` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.1038961038961039 - nodes in this community are weakly interconnected."
+    }
+  ]
+}
