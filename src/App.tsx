@@ -16,7 +16,7 @@ import { Board } from './board/Board'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectOverview } from './pages/ProjectOverview'
 import './pages/pages.css'
-import { COMPARE_GOAL, DEEP_GOAL, loadProjects, newProject, projectBoardKey, saveProjects, summarizeSource, type Project } from './projects'
+import { COMPARE_GOAL, DEEP_GOAL, loadProjects, markSourcesReviewed, newProject, projectBoardKey, projectSynthesisKey, saveProjects, summarizeSource, synthesizeProject, type Project } from './projects'
 import { PersistentTldraw } from './persistentCanvas'
 import { Wordmark } from './Logo'
 import type { User } from './AuthGate'
@@ -189,7 +189,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     const [first, ...rest] = projectSources.map(p => p.id)
     enterLesson(first, rest, DEEP_GOAL(activeProject.name), { kind: 'deep', label: 'Deep dive' })
   }
-  const projectSummaries = useMemo(() => Object.fromEntries(Object.entries(activeProject?.summaries || {}).map(([id, s]) => [id, s.tidbit])), [activeProject])
+  const projectSummaries = useMemo(() => Object.fromEntries(Object.entries(activeProject?.summaries || {}).map(([id, s]) => [id, s.summary || s.tidbit])), [activeProject])
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
@@ -887,9 +887,21 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
       setPendingSummaries(prev => new Set(prev).add(paper.id))
       summarizeSource(paper)
         .then(summary => updateProjects(list => list.map(p => p.id === projectId ? { ...p, summaries: { ...p.summaries, [paper.id]: summary } } : p)))
-        .catch(() => { /* leave it unsummarised; the card still works */ })
+        .catch(reason => { summaryRequested.current.delete(paper.id); setStatus(errorMessage(reason)) })
         .finally(() => setPendingSummaries(prev => { const next = new Set(prev); next.delete(paper.id); return next }))
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject, view, papers])
+
+  const synthesisRequested = useRef(new Set<string>())
+  useEffect(() => {
+    if (!activeProject || (view !== 'overview' && view !== 'board') || activeProject.sourceIds.length < 2 || !activeProject.sourceIds.every(id => activeProject.summaries[id])) return
+    const key = projectSynthesisKey(activeProject)
+    if (activeProject.synthesisFor === key || synthesisRequested.current.has(key)) return
+    synthesisRequested.current.add(key)
+    synthesizeProject(activeProject, projectSources)
+      .then(synthesis => updateProjects(list => list.map(project => project.id === activeProject.id && projectSynthesisKey(project) === key ? { ...project, synthesis, synthesisFor: key } : project)))
+      .catch(reason => { synthesisRequested.current.delete(key); setStatus(errorMessage(reason)) })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject, view, papers])
 
@@ -1012,6 +1024,12 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
       paperEvidence: readPaperEvidence(currentPaper.text, checkpoint.sourcePages, currentPaper.pageCount),
     })
     await persistLearningReview(review, checkpoint.title, checkpointIndex, checkpoint.checkForUnderstanding, answer, checkpoint.sourcePages)
+    if (review.status === 'clear' && checkpointIndex === (planRef.current?.sessions.length || 0) - 1) {
+      const projectId = activeProjectIdRef.current
+      const completedIds = lessonMode.kind === 'deep' ? projectsRef.current.find(project => project.id === projectId)?.sourceIds || []
+        : lessonMode.kind === 'source' ? [currentPaper.id] : []
+      if (projectId && completedIds.length) updateProjects(list => list.map(project => project.id === projectId ? markSourcesReviewed(project, completedIds) : project))
+    }
     const teacherTranscript = transcriptRef.current.slice(checkpointTranscriptStartRef.current).filter(line => line.role === 'Tutor').slice(-24).map(line => line.text).join('\n')
     if (teacherTranscript.length >= 80) {
       try {
@@ -1042,7 +1060,7 @@ export default function App({ user, onSignOut, notice }: { user: User; onSignOut
     }
     if (review.status !== 'clear') await adaptTeachingPlan(review)
     return review
-  }), [currentPaper, currentId, persistLearningReview, runLearningOperation, adaptTeachingPlan])
+  }), [currentPaper, currentId, persistLearningReview, runLearningOperation, adaptTeachingPlan, lessonMode, updateProjects])
 
   const startPractice = useCallback((checkpoint: { title: string; goal: string; concepts: string[]; sourcePages: number[] }) => runLearningOperation(async () => {
     if (!currentPaper) throw new Error('No source is selected.')

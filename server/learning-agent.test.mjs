@@ -50,7 +50,7 @@ test('diagnosis calls a read-only deep agent with the source and medium reasonin
   assert.deepEqual(lastAgentInput.files['/paper/pages/page-001.txt'].content, ['[Page 1 of 3]\nFirst page'])
   assert.deepEqual(lastAgentInput.files['/paper/pages/page-003.txt'].content, ['[Page 3 of 3]\nThird page'])
   assert.match(lastAgentInput.files['/paper/source-index.txt'].content[0], /page-003\.txt/)
-  assert.equal(lastInvokeOptions.recursionLimit, 16)
+  assert.equal(lastInvokeOptions.recursionLimit, 22)
   assert.equal(lastAgentOptions.middleware[0].options.permissions[0].operations[0], 'read')
   assert.deepEqual(lastAgentOptions.model.options.reasoning, { effort: 'medium' })
 })
