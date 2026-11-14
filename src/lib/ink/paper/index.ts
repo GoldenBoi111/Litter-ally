@@ -1,5 +1,0 @@
-export * from '@/lib/ink/paper/edges'
-export * from '@/lib/ink/paper/shadows'
-export * from '@/lib/ink/paper/stocks'
-export * from '@/lib/ink/paper/props'
-export * from '@/lib/ink/paper/faces'
