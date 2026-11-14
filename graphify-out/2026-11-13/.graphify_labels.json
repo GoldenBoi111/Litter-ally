@@ -1,0 +1,19 @@
+{
+  "0": "index.mjs",
+  "1": "compilerOptions",
+  "2": "package.json",
+  "3": "dependencies",
+  "4": "App.tsx",
+  "7": "vite-env.d.ts",
+  "8": "scripts",
+  "12": "run-paper-board.ps1",
+  "13": "setup-voice.ps1",
+  "14": "setup.ps1",
+  "15": "start-voice-services.ps1",
+  "16": "stop-voice-services.ps1",
+  "17": "paper-text.d.mts",
+  "18": "vite-env.d.ts",
+  "19": "voice-turn.d.mts",
+  "20": "synthesize_breeze.ps1",
+  "21": "synthesize_qwen.ps1"
+}
