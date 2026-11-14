@@ -220,19 +220,24 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     else { lessonEntryRef.current = { primary, extra, goal }; setCurrentId(primary) }
   }
   const titleOf = (id: string) => papers.find(p => p.id === id)?.title || 'Source'
-  const openLesson = (sourceId: string) => enterLesson(sourceId, [], null)
+  const openLesson = (sourceId: string) => {
+    if (papers.find(paper => paper.id === sourceId)?.documentRole === 'process') { setStatus('This process document guides lessons on content sources in the project.'); return }
+    enterLesson(sourceId, [], null)
+  }
   const openCompare = (a: string, b: string) => enterLesson(a, [b], COMPARE_GOAL(titleOf(a), titleOf(b)))
   const projectSources = activeProject ? activeProject.sourceIds.map(id => papers.find(p => p.id === id)).filter((p): p is ImportedPaper => Boolean(p)) : []
+  const contentSources = projectSources.filter(paper => paper.documentRole !== 'process')
   const openDeep = () => {
-    if (!activeProject || !projectSources.length) return
-    const [first, ...rest] = projectSources.map(p => p.id)
+    if (!activeProject || !contentSources.length) return
+    const [first, ...rest] = contentSources.map(p => p.id)
     enterLesson(first, rest, DEEP_GOAL(activeProject.name))
   }
   const projectSummaries = useMemo(() => Object.fromEntries(Object.entries(activeProject?.summaries || {}).map(([id, s]) => [id, s.summary || s.tidbit])), [activeProject])
-  const projectSynthesisCurrent = !!activeProject && activeProject.synthesisFor === projectSynthesisKey(activeProject)
-  const projectAnalysisStatus = activeProject && projectSources.some(paper => !isCurrentSummary(activeProject.summaries[paper.id]))
+  const contentProject = activeProject ? { ...activeProject, sourceIds: contentSources.map(paper => paper.id), summaries: Object.fromEntries(contentSources.flatMap(paper => activeProject.summaries[paper.id] ? [[paper.id, activeProject.summaries[paper.id]]] : [])) } : null
+  const projectSynthesisCurrent = !!contentProject && contentProject.synthesisFor === projectSynthesisKey(contentProject)
+  const projectAnalysisStatus = activeProject && contentSources.some(paper => !isCurrentSummary(activeProject.summaries[paper.id]))
     ? 'Reading sources…'
-    : activeProject && projectSources.length > 1 && !projectSynthesisCurrent ? 'Finding connections…' : null
+    : activeProject && contentSources.length > 1 && !projectSynthesisCurrent ? 'Finding connections…' : null
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
@@ -402,11 +407,19 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
   }, [addOpen])
 
   const saveImport = useCallback(async (result: ImportResult) => {
-    const paper: ImportedPaper = { ...result, id: crypto.randomUUID(), importedAt: new Date().toISOString() }
+    let roleSummary: Awaited<ReturnType<typeof summarizeSource>> | undefined
+    if (result.sourceKind !== 'topic' && result.text.trim()) {
+      try { roleSummary = await summarizeSource({ ...result, id: '', importedAt: '' }) }
+      catch { /* Classification is advisory; imports remain usable as content when the model is unavailable. */ }
+    }
+    const paper: ImportedPaper = { ...result, documentRole: roleSummary?.documentRole || 'content', id: crypto.randomUUID(), importedAt: new Date().toISOString() }
     await savePaper(paper)
     setPapers(existing => [paper, ...existing])
     const projectId = activeProjectIdRef.current
-    if (projectId) updateProjects(list => list.map(p => p.id === projectId ? { ...p, sourceIds: [...p.sourceIds, paper.id] } : p))
+    if (projectId) updateProjects(list => list.map(p => p.id === projectId ? {
+      ...p, sourceIds: [...new Set([...p.sourceIds, paper.id])],
+      summaries: paper.documentRole === 'process' || !roleSummary ? p.summaries : { ...p.summaries, [paper.id]: roleSummary },
+    } : p))
     setAnalysisError(null)
     setCurrentId(paper.id)
     setStatus(paper.sourceKind === 'topic' ? `Started a lesson on "${paper.title}"` : `Imported "${paper.title}" - ${paper.pageCount} segments`)
@@ -972,6 +985,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     if (!activeProject) return
     const projectId = activeProject.id
     for (const paper of projectSources) {
+      if (paper.documentRole === 'process') continue
       const requestKey = `${projectId}:${paper.id}`
       if (isCurrentSummary(activeProject.summaries[paper.id]) || summaryRequested.current.has(requestKey)) continue
       summaryRequested.current.add(requestKey)
@@ -986,12 +1000,12 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
 
   const synthesisRequested = useRef(new Set<string>())
   useEffect(() => {
-    if (!activeProject || activeProject.sourceIds.length < 2 || !activeProject.sourceIds.every(id => isCurrentSummary(activeProject.summaries[id]))) return
-    const key = projectSynthesisKey(activeProject)
+    if (!activeProject || contentSources.length < 2 || !contentSources.every(paper => isCurrentSummary(activeProject.summaries[paper.id]))) return
+    const key = projectSynthesisKey(contentProject!)
     const requestKey = `${activeProject.id}:${key}`
     if (activeProject.synthesisFor === key || synthesisRequested.current.has(requestKey)) return
     synthesisRequested.current.add(requestKey)
-    synthesizeProject(activeProject, projectSources)
+    synthesizeProject(contentProject!, contentSources)
       .then(synthesis => updateProjects(list => list.map(project => project.id === activeProject.id && projectSynthesisKey(project) === key ? { ...project, synthesis, synthesisFor: key } : project)))
       .catch(reason => { synthesisRequested.current.delete(requestKey); setAnalysisError({ projectId: activeProject.id, message: errorMessage(reason) }) })
   // eslint-disable-next-line react-hooks/exhaustive-deps
