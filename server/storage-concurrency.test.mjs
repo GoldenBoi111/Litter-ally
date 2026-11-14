@@ -11,7 +11,15 @@ import { createLibraryRouter } from './library.mjs'
 
 const source = readFileSync(new URL('../src/storage.ts', import.meta.url), 'utf8')
 const compiled = (await transformWithOxc(source, 'src/storage.ts')).code
-const { saveLearningOutcome, savePaper } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+const { saveLearningOutcome, savePaper, toLearningSource } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+
+test('recovers page segments from a legacy PDF with an empty segment list', () => {
+  const source = toLearningSource({
+    id: 'legacy', title: 'Legacy PDF', sourceKind: 'pdf', sourceSegments: [], pageCount: 2,
+    text: '[Page 1]\nFirst page\n\n[Page 2]\nSecond page', importedAt: '2026-01-01',
+  })
+  assert.deepEqual(source.segments.map(segment => segment.text), ['First page', 'Second page'])
+})
 
 test('concurrent learning writes merge against the latest persisted graph', async t => {
   const dataDir = await mkdtemp(join(tmpdir(), 'litterally-'))
