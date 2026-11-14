@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+
+/reference/learnharness/
+
+# Litter-ally accounts and saved files
+data/
