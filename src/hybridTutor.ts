@@ -72,6 +72,10 @@ export class HybridTutor {
   private browserVoice = false
   private recognition: { start(): void; stop(): void; abort(): void; onresult: ((e: any) => void) | null; onerror: ((e: any) => void) | null; onend: (() => void) | null; lang: string; interimResults: boolean; continuous: boolean } | null = null
   private recognized = ''
+  /** Set when the learner cut the tutor off to ask something: answer, then pick the lesson back up. */
+  private resumeAfterAnswer = false
+  /** Speech started early (from streamed tool arguments) keyed by beatId, so the beat doesn't speak it twice. */
+  private earlySpeech = new Map<string, Promise<boolean>>()
 
   constructor(private callbacks: TutorCallbacks, private preparedAudioContext?: AudioContext, options: { streaming?: boolean; bargeIn?: boolean; rtcUrl?: string; iceServers?: RTCIceServer[] } = {}) {
     this.streaming = options.streaming !== false
@@ -163,7 +167,10 @@ export class HybridTutor {
       this.interrupt()
       this.interruptedForInput = false
       this.appendInterruptedState()
-      this.input.push({ type: 'message', role: 'user', content: message.trim() })
+      const text = message.trim()
+      this.transcripts = [...this.transcripts, { role: 'You' as const, text }].slice(-8)
+      this.callbacks.onTranscript(this.transcripts)
+      this.input.push({ type: 'message', role: 'user', content: text })
       void this.respond()
     }
   }
@@ -219,6 +226,7 @@ export class HybridTutor {
     }
     const request = ++this.pushToTalkRequest
     this.micMuted = false
+    this.cutInForLearner()
     try {
       await this.vad?.start()
       if (this.closed || this.paused || this.micMuted) {
@@ -247,6 +255,15 @@ export class HybridTutor {
     void this.respond()
   }
 
+  /** Pressing to talk stops the tutor immediately (not after voice detection kicks in). */
+  private cutInForLearner() {
+    if (!this.isBusy() && !this.currentBeat) return
+    this.interruptedForInput = true
+    this.resumeAfterAnswer = true
+    this.interrupt()
+    this.sendControl({ type: 'speech.cancel' })
+  }
+
   private setBrowserMic(muted: boolean) {
     this.micMuted = muted
     if (muted) {
@@ -255,8 +272,7 @@ export class HybridTutor {
     }
     const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!Ctor) { this.micMuted = true; this.callbacks.onStatus('error', 'This browser has no speech recognition. Type your question instead.'); return false }
-    this.interruptedForInput = this.isBusy()
-    if (this.interruptedForInput) this.interrupt()
+    this.cutInForLearner()
     const recognition = new Ctor()
     recognition.lang = 'en-US'
     recognition.interimResults = false
@@ -304,6 +320,7 @@ export class HybridTutor {
   }
 
   private interrupt() {
+    this.earlySpeech.clear()
     if (this.browserVoice && typeof speechSynthesis !== 'undefined') speechSynthesis.cancel()
     const interruptedAt = performance.now()
     const wasPlaying = this.sources.size > 0 || this.ttsControllers.size > 0
@@ -347,6 +364,7 @@ export class HybridTutor {
   private continueAfterUnrecognizedInterruption() {
     if (!canContinueAfterUnrecognizedInterruption(this.interruptedForInput, this.closed, this.paused)) return
     this.interruptedForInput = false
+    this.resumeAfterAnswer = false
     this.appendInterruptedState()
     this.input.push({ type: 'message', role: 'user', content: 'The interruption was not understood. Continue the lesson from the current canvas state, briefly rephrasing any cut-off explanation.' })
     void this.respond()
@@ -483,7 +501,10 @@ export class HybridTutor {
     this.appendInterruptedState()
     this.transcripts = [...this.transcripts, { role: 'You' as const, text }].slice(-8)
     this.callbacks.onTranscript(this.transcripts)
-    this.input.push({ type: 'message', role: 'user', content: text })
+    if (this.resumeAfterAnswer) {
+      this.resumeAfterAnswer = false
+      this.input.push({ type: 'message', role: 'user', content: `${text}\n\n(I cut you off mid-explanation to say this. Answer me directly and briefly first. Then say a short bridge like "Back to where we were" and continue the lesson from exactly where you stopped, finishing the interrupted explanation and its drawing by reusing the same beatId.)` })
+    } else this.input.push({ type: 'message', role: 'user', content: text })
     if (this.isBusy()) this.pendingResponse = true
     else void this.respond()
   }
@@ -510,6 +531,7 @@ export class HybridTutor {
     const toolResults: Array<{ output: string; context?: InputItem; continueAutomatically?: boolean }> = []
     let pendingTools = 0
     let toolTail = Promise.resolve()
+    const streamingBeats = new Map<string, { args: string; started: boolean }>()
     try {
       const response = await fetch('/api/voice/respond', {
         method: 'POST', signal: controller.signal,
@@ -529,7 +551,7 @@ export class HybridTutor {
         for (const block of blocks) {
           const line = block.split('\n').find(item => item.startsWith('data: '))
           if (!line) continue
-          const event = JSON.parse(line.slice(6)) as { type: string; text?: string; call?: Extract<InputItem, { type: 'function_call' }>; output?: InputItem[]; error?: string }
+          const event = JSON.parse(line.slice(6)) as { type: string; id?: string; name?: string; delta?: string; text?: string; call?: Extract<InputItem, { type: 'function_call' }>; output?: InputItem[]; error?: string }
           if (event.type === 'text' && event.text) {
             if (!this.firstTextRecorded) {
               this.firstTextRecorded = true
@@ -542,6 +564,25 @@ export class HybridTutor {
               for (const phrase of takeSpeakablePhrases(() => phraseBuffer, value => { phraseBuffer = value })) {
                 this.recordFirstPhrase()
                 this.enqueueSpeech(phrase, turn)
+              }
+            }
+          } else if (event.type === 'tool_start' && event.id) {
+            if (event.name === 'present_teaching_beat') streamingBeats.set(event.id, { args: '', started: false })
+          } else if (event.type === 'tool_delta' && event.id && event.delta) {
+            const streaming = streamingBeats.get(event.id)
+            if (streaming && !streaming.started) {
+              streaming.args += event.delta
+              const early = readEarlyBeatSpeech(streaming.args)
+              // Speak as soon as the sentence is known, while the stroke data is still streaming.
+              // Only when nothing else is queued, so spoken order always matches beat order.
+              if (early && this.queuedTeachingBeats === 0 && !this.currentBeat && turn === this.turnId && !this.seenBeatIds.has(early.beatId)) {
+                streaming.started = true
+                this.seenBeatIds.add(early.beatId)
+                this.transcripts = [...this.transcripts, { role: 'Tutor' as const, text: early.speech }].slice(-8)
+                this.callbacks.onTranscript(this.transcripts)
+                this.callbacks.onStatus('speaking')
+                this.recordFirstPhrase()
+                this.earlySpeech.set(early.beatId, this.speak(early.speech, turn))
               }
             }
           } else if (event.type === 'tool' && event.call) {
@@ -726,7 +767,9 @@ export class HybridTutor {
         if (this.currentBeat?.id === beat.beatId) this.currentBeat.drawingComplete = result.actions.every(action => action.state === 'complete')
         return result
       })
-      const spoken = this.speak(beat.speech, turn).then(async complete => {
+      const early = this.earlySpeech.get(beat.beatId)
+      this.earlySpeech.delete(beat.beatId)
+      const spoken = (early ?? this.speak(beat.speech, turn)).then(async complete => {
         await this.waitForPlayback(turn)
         if (this.currentBeat?.id === beat.beatId) this.currentBeat.spokenComplete = complete && turn === this.turnId
       })
@@ -765,7 +808,14 @@ export class HybridTutor {
       output = this.callbacks.readSourcePage(Number(args.pageNumber))
     } else if (name === 'draw_lesson_diagram' && Number.isInteger(args.diagramIndex)) {
       const request = typeof args.request === 'string' ? args.request.trim().slice(0, 600) : ''
-      output = await this.callbacks.drawDiagram(Number(args.diagramIndex), request)
+      // Don't block the voice on diagram planning + drawing: start it and let the tutor keep talking while ink appears.
+      const turn = this.turnId
+      void this.callbacks.drawDiagram(Number(args.diagramIndex), request).then(result => {
+        if (turn === this.turnId && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: ${result})` })
+      }).catch(error => {
+        if (turn === this.turnId && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: the diagram failed: ${error instanceof Error ? error.message : 'unknown error'}. Continue without it.)` })
+      })
+      output = 'The diagram has started drawing on the board and will appear stroke by stroke over the next half minute. Do not wait for it: start explaining right now with present_teaching_beat, walking through the idea in the order it is being drawn, and do not call draw_lesson_diagram again for it.'
     } else if (name === 'move_checkpoint' && (args.direction === 'next' || args.direction === 'previous')) {
       output = await this.callbacks.moveCheckpoint(args.direction)
     } else if (name === 'inspect_canvas_selection' && typeof args.question === 'string') {
@@ -774,6 +824,17 @@ export class HybridTutor {
     }
     return { output, context, continueAutomatically }
   }
+}
+
+/** Pull beatId and speech out of a partially streamed present_teaching_beat argument string, once both strings are complete. */
+export function readEarlyBeatSpeech(partial: string): { beatId: string; speech: string } | null {
+  const field = (name: string) => {
+    const match = new RegExp(`"${name}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`).exec(partial)
+    if (!match) return null
+    try { return JSON.parse(`"${match[1]}"`) as string } catch { return null }
+  }
+  const beatId = field('beatId'), speech = field('speech')
+  return beatId && speech && speech.trim() ? { beatId, speech: speech.trim() } : null
 }
 
 function browserSpeechAvailable() {
