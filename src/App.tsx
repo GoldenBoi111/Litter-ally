@@ -1130,6 +1130,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
           {view === 'lesson' && currentPaper && <><span className="crumb-sep" aria-hidden="true">/</span><span className="crumb-current" aria-current="page">{currentPaper.title}</span></>}
         </nav>
         <div className="top-actions">
+          {view === 'board' && <Button size="sm" variant="outline" onClick={openDeep} disabled={!contentSources.length} title={contentSources.length ? `Learn all ${contentSources.length} content ${contentSources.length === 1 ? 'source' : 'sources'} in this project, start to finish` : 'Add a content source to learn this project'}>Deep learn project</Button>}
           {view === 'board' && <Button size="sm" variant="outline" onClick={() => navigate('overview')}>Sources</Button>}
           {view === 'overview' && <Button size="sm" variant="outline" onClick={() => navigate('board')}>Board</Button>}
           <Button size="sm" variant="outline" title={`Signed in as ${user.email}`} onClick={() => setAccountOpen(true)}>Account</Button>
@@ -1164,7 +1165,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
             onHideConnection={pair => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: [...new Set([...(project.hiddenConnectionPairs || []), pair])] } : project))}
             onRestoreConnection={pair => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: (project.hiddenConnectionPairs || []).filter(item => item !== pair) } : project))}
             onRestoreHiddenConnections={() => updateProjects(list => list.map(project => project.id === activeProject.id ? { ...project, hiddenConnectionPairs: [] } : project))}
-            onOpen={openLesson} onCompare={openCompare} onAdd={openAdd} onDeep={openDeep}
+            onOpen={openLesson} onCompare={openCompare} onAdd={openAdd}
             onChangeRole={changeDocumentRole}
           />)
           : view !== 'lesson' ? <ProjectsPage projects={projects} papers={papers} loading={!projectsLoaded || !libraryReady} onOpen={id => navigate('board', id)} onCreate={(name, description) => { const p = newProject(name, description); updateProjects(list => [p, ...list]); navigate('board', p.id) }} onDelete={project => { if (confirm(`Delete the project "${project.name}"? Its sources stay in your library.`)) updateProjects(list => list.filter(p => p.id !== project.id)) }} /> : <>
