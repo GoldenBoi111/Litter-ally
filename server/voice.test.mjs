@@ -42,6 +42,8 @@ test('Responses text, function calls, output history and failures become safe vo
   assert.deepEqual(safeResponsesVoiceEvents({ type: 'response.output_text.delta', delta: 'Hello.' }), [{ type: 'text', text: 'Hello.' }])
   const call = { type: 'function_call', call_id: 'c1', name: 'draw_lesson_diagram', arguments: '{"diagramIndex":0}' }
   assert.deepEqual(safeResponsesVoiceEvents({ type: 'response.output_item.done', item: call }), [{ type: 'tool', call }])
+  assert.deepEqual(safeResponsesVoiceEvents({ type: 'response.output_item.added', item: { type: 'function_call', id: 'fc1', name: 'present_teaching_beat' } }), [{ type: 'tool_start', id: 'fc1', name: 'present_teaching_beat' }])
+  assert.deepEqual(safeResponsesVoiceEvents({ type: 'response.function_call_arguments.delta', item_id: 'fc1', delta: '{"beat' }), [{ type: 'tool_delta', id: 'fc1', delta: '{"beat' }])
   const output = [{ type: 'reasoning', encrypted_content: 'opaque' }, call]
   assert.deepEqual(safeResponsesVoiceEvents({ type: 'response.completed', response: { output } }), [{ type: 'output', output }, { type: 'done' }])
   assert.deepEqual(safeResponsesVoiceEvents({ type: 'response.failed', response: { error: { message: 'Unavailable' } } }), [{ type: 'error', error: 'Unavailable' }])
