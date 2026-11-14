@@ -14,7 +14,7 @@ compiled = compiled
   .replace(/from ["']@tldraw\/tlschema["']/, `from ${JSON.stringify(schemaMock)}`)
   .replace(/from ["']\.\.\/server\/agent-actions\.mjs["']/, `from ${JSON.stringify(new URL('./agent-actions.mjs', import.meta.url).href)}`)
   .replace(/from ["']\.\/storage["']/, `from ${JSON.stringify(storageMock)}`)
-const { applyTeachingBeat, getSelectionContext } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+const { applyDiagramPlan, applyTeachingBeat, getSelectionContext } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
 test('installed tldraw schema accepts the native compressed pen segments', () => {
   const segments = compressLegacySegments([{ type: 'free', points: [{ x: 0, y: 0, z: 0.5 }, { x: 20, y: 10, z: 0.5 }] }])
@@ -58,6 +58,20 @@ test('animates a beat into stable completed native shapes', async () => {
   assert.equal(editor.shapes.size, 2)
   assert.deepEqual(result.actions.map(action => action.state), ['complete', 'complete'])
   assert.ok([...editor.shapes.values()].some(shape => shape.type === 'draw' && shape.props.isComplete))
+})
+
+test('draws a diagram with more actions than a live teaching beat', async () => {
+  const editor = fakeEditor()
+  const actions = Array.from({ length: 13 }, (_, index) => ({
+    _type: 'stroke', id: `line_${index}`, atMs: 0,
+    points: [{ x: 20 + index * 20, y: 20 }, { x: 20 + index * 20, y: 40 }],
+    color: 'black', size: 'm', closed: false,
+  }))
+  await applyDiagramPlan(editor, { actions }, {
+    lessonId: 'paper', checkpointIndex: 0, diagramIndex: 0, diagramKind: 'mechanism', signal: new AbortController().signal,
+  })
+  assert.equal(editor.shapes.size, 13)
+  assert.ok([...editor.shapes.values()].every(shape => shape.meta.actionState === 'complete'))
 })
 
 test('keeps partial ink and resumes the same stable stroke without duplication', async () => {
