@@ -34,7 +34,7 @@
 .agent-cursor path{fill:var(--color-accent);stroke:var(--color-background-surface);stroke-width:1.5;stroke-linejoin:round}
 .agent-cursor span{margin:12px 0 0 -2px;padding:2px 5px;border-radius:3px;background:var(--color-accent);color:var(--color-background-surface);font:600 10px/1.3 var(--font-family-body);box-shadow:0 1px 3px #0003}
 .tutor-panel-toggle{display:none}
-.paper-panel.tutor-panel{width:clamp(22rem,29vw,27rem)}
+.paper-panel.tutor-panel{width:clamp(19.375rem,29vw,27rem)}
 .tutor-panel [data-type="supporting"]{font-size:var(--font-size-base);color:var(--color-text-secondary)}
 .tutor-panel [data-type="label"]{color:var(--color-text-primary)}
 .checkpoint-list,.tutor-transcript{list-style:none;margin:0;padding:0;display:grid;gap:var(--spacing-1)}

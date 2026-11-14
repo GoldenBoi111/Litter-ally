@@ -79,3 +79,52 @@
 .board-string .string-thread { transition: stroke-width 120ms var(--ease-out); }
 .board-string.is-selected .string-thread { stroke-width: 4; }
 .board-string.is-selected .string-shadow { stroke-width: 6; stroke: rgb(40 36 32 / 0.24); }
+
+/* ---------- Layout switcher (spec items 11–14) ---------- */
+.board-layouts {
+  position: absolute; right: 14px; bottom: 14px; z-index: 300; display: flex; gap: 2px; padding: 4px;
+  background: var(--ll-paper); border-radius: 6px; box-shadow: 0 4px 14px rgb(40 36 32 / 0.14);
+}
+.board-layouts button {
+  width: 30px; height: 28px; border: 0; border-radius: 4px; background: transparent; cursor: pointer;
+  font: 600 13px/1 var(--font-family-body, system-ui); color: var(--ll-ink);
+}
+.board-layouts button[aria-checked='true'] { background: var(--ll-ink); color: var(--ll-paper); }
+
+/* Cards everywhere: index cards with a 2px hand-drawn stroke and a soft shadow (analog desk). */
+.board .board-card { filter: drop-shadow(var(--desk-shadow, 0 4px 12px rgb(0 0 0 / .06))); }
+.board .board-card > * { outline: 2px solid var(--desk-stroke, #2d2d2a); outline-offset: -1px; border-radius: 3px 6px 4px 5px / 5px 3px 6px 4px; }
+
+/* Mode A: daylight parchment with grain, indigo and coral margin ink. */
+.board[data-layout='editorial'] { background: var(--desk-grain), var(--desk-parchment, #f9f8f6); --string: #b4534a; --string-light: var(--desk-coral, #fca5a5); }
+
+/* Mode B: charcoal slate with grain and a faint chalk dot grid. No neon: chalk-white string. */
+.board[data-layout='command'] {
+  --string: #e7e2d6; --string-light: #fef08a;
+  background: var(--desk-grain), radial-gradient(circle, rgb(231 226 214 / 0.10) 1px, transparent 1.3px) 0 0 / 24px 24px, var(--desk-charcoal, #121214);
+}
+.board[data-layout='command'] .board-card > * { outline-color: #e7e2d6; }
+.board[data-layout='command'] .board-layouts,
+.board[data-layout='command'] .board-actions { background: #1d1d20; box-shadow: 0 4px 14px rgb(0 0 0 / .4); }
+.board[data-layout='command'] .board-layouts button,
+.board[data-layout='command'] .board-actions button,
+.board[data-layout='command'] .board-empty { color: #e7e2d6; }
+.board[data-layout='command'] .board-layouts button[aria-checked='true'] { background: var(--desk-highlight, #fef08a); color: #121214; }
+
+/* Mode C: radial gravity on warm parchment, a faint highlighter halo at the centre of mass. */
+.board[data-layout='gravity'] { background: radial-gradient(circle at 50% 50%, rgb(254 240 138 / 0.28), transparent 45%), var(--desk-grain), var(--desk-parchment, #f9f8f6); }
+
+/* Switcher and action bars read as stamped paper slips. */
+.board-layouts, .board-actions { border: 2px solid var(--desk-stroke, #2d2d2a); border-radius: 12px 4px 10px 5px / 5px 10px 4px 12px; box-shadow: var(--desk-shadow); }
+.board-layouts button, .board-actions button { font-family: var(--font-script); font-size: 15px; }
+.board-actions button[aria-pressed='true'] { background: var(--desk-highlight, #fef08a); color: var(--desk-stroke); }
+
+/* ---------- Command palette (spec item 34) ---------- */
+.palette-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; justify-items: center; align-items: start; padding-top: 14vh; background: rgb(20 18 16 / 0.28); }
+.palette { width: min(560px, 92vw); background: var(--desk-card, #fffdf9); border: 2px solid var(--desk-stroke, #2d2d2a); border-radius: 14px 6px 12px 5px / 6px 12px 5px 14px; box-shadow: 0 20px 50px rgb(0 0 0 / 0.28); overflow: hidden; }
+.palette input { width: 100%; box-sizing: border-box; padding: 14px 16px; border: 0; border-bottom: 1px solid rgb(0 0 0 / 0.08); font: 15px var(--font-family-body, system-ui); background: transparent; outline: none; color: var(--ll-ink); }
+.palette ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow: auto; }
+.palette li { display: flex; justify-content: space-between; padding: 9px 10px; border-radius: 6px; cursor: pointer; font: 14px var(--font-family-body, system-ui); color: var(--ll-ink); }
+.palette li[aria-selected='true'] { background: var(--desk-highlight, #fef08a); }
+.palette kbd { font: 12px var(--font-mono, monospace); opacity: 0.6; }
+.palette-empty { opacity: 0.6; cursor: default; }

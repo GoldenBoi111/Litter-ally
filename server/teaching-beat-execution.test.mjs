@@ -6,7 +6,7 @@ import { compressLegacySegments, drawShapeProps } from '@tldraw/tlschema'
 
 const source = readFileSync(new URL('../src/lessonAgent.ts', import.meta.url), 'utf8')
 let compiled = (await transformWithOxc(source, 'src/lessonAgent.ts')).code
-const storageMock = `data:text/javascript,${encodeURIComponent("export const knowledgeNodeId = value => value")}`
+const storageMock = `data:text/javascript,${encodeURIComponent("export const knowledgeNodeId = value => value; export const readApiJson = value => value")}`
 const tldrawMock = `data:text/javascript,${encodeURIComponent("export const createShapeId = value => `shape:${value}`; export const toRichText = value => value")}`
 const schemaMock = `data:text/javascript,${encodeURIComponent("export const compressLegacySegments = value => value")}`
 compiled = compiled
