@@ -198,7 +198,12 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
 
       </div>
 
-      {captions && (last || detail) && (
+      {status === 'error' && detail ? (
+        // Start failures (e.g. a blocked microphone) must be visible even with captions off, or Start just looks like it reset.
+        <div className="lesson-captions" role="alert">
+          <p className="lesson-captions-detail">{detail}</p>
+        </div>
+      ) : captions && (last || detail) && (
         <div className="lesson-captions" role="log" aria-live="polite" aria-label="Tutor captions">
           {last ? <p>{captionTail(last.text)}</p> : <p className="lesson-captions-detail">{detail}</p>}
         </div>
