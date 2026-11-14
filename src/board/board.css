@@ -21,6 +21,7 @@
 .tl-container[data-dragging='true'] .board-card,
 .board-card:active { filter: drop-shadow(0 10px 14px rgb(40 36 32 / 0.18)); translate: 0 -2px; }
 .board-card-meta { font-family: var(--font-type); font-size: 15px; color: var(--ll-ink-soft); }
+.board-card-process .board-index-process { border-top: 5px solid var(--desk-highlight, #fef08a); }
 
 /* String: a shadow, the thread, and a lighter twist so it reads as fibre, not a vector line. */
 .board-string { pointer-events: none; }
