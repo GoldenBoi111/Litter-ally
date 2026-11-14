@@ -3,6 +3,7 @@ import { AIMD, levelLabel } from './aimd'
 import type { DiagnosticTurn } from './learning'
 import { readApiJson } from './storage'
 import './diagnostic.css'
+import { microphoneErrorMessage } from './micAccess'
 
 type Props = {
   title: string
@@ -15,6 +16,8 @@ type Props = {
   error: string
   onAnswer: (text: string) => void
   onClose: () => void
+  /** Closes the diagnostic and starts the live voice lesson in the same click (the click is the audio gesture). */
+  onStart: () => void
 }
 
 const SAMPLE_RATE = 16_000
@@ -91,7 +94,7 @@ async function transcribe(blob: Blob) {
 }
 
 /** The spoken diagnostic, shown while checkpoint 1 is planned. The tutor speaks; the learner answers by voice. The meter shows the AIMD language level. */
-export function DiagnosticChat({ title, turns, busy, done, level, planReady, error, onAnswer, onClose }: Props) {
+export function DiagnosticChat({ title, turns, busy, done, level, planReady, error, onAnswer, onClose, onStart }: Props) {
   const [phase, setPhase] = useState<'idle' | 'speaking' | 'listening' | 'transcribing'>('idle')
   const [micError, setMicError] = useState('')
   const recorder = useRef<MediaRecorder | null>(null)
@@ -171,8 +174,8 @@ export function DiagnosticChat({ title, turns, busy, done, level, planReady, err
       setPhase('listening')
       if (stopRequested.current) next.stop() // Space was released before the mic opened
       setTimeout(() => { if (recorder.current === next && next.state === 'recording') next.stop() }, MAX_SECONDS * 1000)
-    } catch {
-      setMicError('Allow microphone access to answer by voice.')
+    } catch (reason) {
+      setMicError(microphoneErrorMessage(reason) || 'Allow microphone access to answer by voice.')
       setPhase('idle')
     }
   }
@@ -200,7 +203,7 @@ export function DiagnosticChat({ title, turns, busy, done, level, planReady, err
       {done ? (
         <div className="diagnostic-done">
           <p>Thanks, that gives me a good starting point. I'll explain at the “{levelLabel(level)}” level and adjust as we go.</p>
-          <button type="button" className="diagnostic-primary" onClick={onClose} disabled={!planReady}>{planReady ? 'Start the lesson' : 'Finishing your first checkpoint…'}</button>
+          <button type="button" className="diagnostic-primary" onClick={onStart} disabled={!planReady}>{planReady ? 'Start the lesson' : 'Finishing your first checkpoint…'}</button>
         </div>
       ) : (
         <div className="diagnostic-voice">

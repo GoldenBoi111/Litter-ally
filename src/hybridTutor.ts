@@ -12,6 +12,8 @@ export type TutorCallbacks = {
   showSourcePage: (pageNumber: number) => Promise<{ message: string; imageUrl?: string; pageText?: string }>
   readSourcePage: (pageNumber: number) => string
   moveCheckpoint: (direction: 'next' | 'previous') => Promise<string>
+  /** Erases the agent's board marks for a concept and resets it to its start; returns that concept's brief. */
+  restartConcept: (scope: 'current' | 'previous') => Promise<string>
   getSelection: () => SelectionContext | null
   getWhiteboardContext: () => string
   getTeachingState: (beatId: string) => TeachingExecutionState
@@ -830,6 +832,15 @@ export class HybridTutor {
         if (turn === this.turnId && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: the diagram failed: ${error instanceof Error ? error.message : 'unknown error'}. Continue without it.)` })
       })
       output = 'The diagram has started drawing on the board and will appear stroke by stroke over the next half minute. Do not wait for it: start explaining right now with present_teaching_beat, walking through the idea in the order it is being drawn, and do not call draw_lesson_diagram again for it.'
+    } else if (name === 'restart_concept' && (args.scope === 'current' || args.scope === 'previous')) {
+      const brief = await this.callbacks.restartConcept(args.scope)
+      // Forget the erased beats so the re-teach draws fresh instead of "resuming" marks that no longer exist.
+      this.currentBeat = null
+      this.interruptedBeat = null
+      this.resumeAfterAnswer = false
+      this.automaticBeatStreak = 0
+      this.seenBeatIds.clear()
+      output = `The board for this concept is cleared and the concept is reset to its start. Re-teach it from its very first point with new beat ids, more simply than before, and do not mention the erased marks.\n\n${brief}`
     } else if (name === 'move_checkpoint' && (args.direction === 'next' || args.direction === 'previous')) {
       output = await this.callbacks.moveCheckpoint(args.direction)
     } else if (name === 'inspect_canvas_selection' && typeof args.question === 'string') {
