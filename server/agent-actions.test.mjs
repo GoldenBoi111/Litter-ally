@@ -21,6 +21,8 @@ test('gives every strict diagram action discriminator an explicit JSON Schema ty
   assert.deepEqual(variants.map(variant => variant.properties._type), [
     { type: 'string', const: 'create' },
     { type: 'string', const: 'connect' },
+    { type: 'string', const: 'stroke' },
+    { type: 'string', const: 'text' },
   ])
 })
 
