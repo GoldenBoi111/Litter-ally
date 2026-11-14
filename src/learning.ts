@@ -3,7 +3,7 @@ import type { TeachingPlan } from './lessonAgent'
 export type { LearningEvidence } from './storage'
 
 export type LearningStatus = 'clear' | 'partial' | 'review'
-export const defaultLearningGoal = 'Understand this material end to end: its key ideas, evidence, methods, limitations, and implications.'
+export const defaultLearningGoal = 'Learn what this material actually says: its specific points, facts, and conclusions, in order.'
 
 export type AnswerReview = {
   status: LearningStatus
