@@ -1,0 +1,17 @@
+<!doctype html><html><body><pre id="out">running</pre><script type="module">
+const out = document.getElementById('out'); const log = m => { out.textContent += '\n' + m }
+try {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+  log('mic: ok')
+  const peer = new RTCPeerConnection({ iceServers: [] })
+  const channel = peer.createDataChannel('voice-control')
+  for (const t of stream.getAudioTracks()) peer.addTrack(t, stream)
+  await peer.setLocalDescription(await peer.createOffer())
+  await new Promise(r => { if (peer.iceGatheringState === 'complete') r(); peer.onicegatheringstatechange = () => peer.iceGatheringState === 'complete' && r(); setTimeout(r, 3000) })
+  const res = await fetch('http://127.0.0.1:8190/offer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sdp: peer.localDescription.sdp, type: 'offer' }), targetAddressSpace: 'loopback' })
+  const answer = await res.json(); log('offer: HTTP ' + res.status)
+  await peer.setRemoteDescription(answer)
+  await new Promise((r, j) => { channel.onopen = r; setTimeout(() => j(new Error('datachannel timeout')), 10000) })
+  log('datachannel open: RESULT OK')
+} catch (e) { log('RESULT FAIL: ' + e.name + ': ' + e.message) }
+</script></body></html>
