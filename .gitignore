@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+__pycache__/
+graphify-out/
+.env
+.env.*
+!.env.example
+
+/reference/learnharness/
+
+# Litter-ally accounts and saved files
+data/
+
+# Reproducible benchmark audio
+tts-benchmark/outputs/*.wav

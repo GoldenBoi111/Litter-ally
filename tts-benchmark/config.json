@@ -1,0 +1,20 @@
+{
+  "seed": 42,
+  "breeze": {
+    "runtimeVersion": "v0.1.7",
+    "backend": "vulkan",
+    "model": "breeze-tts-2-q8_0.gguf",
+    "quantization": "Q8_0 with standard higher-precision depth decoder",
+    "cfgScale": 3.0,
+    "instruction": "A natural, warm, articulate university lecturer with a clear neutral American accent, a balanced midrange voice, and a conversational teaching style. Exceptionally clear consonants and precise pronunciation. Calm, intellectually curious, and approachable, with natural variation in pitch and thoughtful pauses between ideas. The speaker explains complicated topics patiently without sounding slow, robotic, theatrical, or like an audiobook narrator."
+  },
+  "qwen": {
+    "runtimeVersion": "v0.9.4",
+    "backend": "cuda",
+    "model": "qwen3-tts-12hz-1.7b-customvoice-q8_0.gguf",
+    "quantization": "Q8_0 GGUF (speaker-sensitive tensors retained at higher precision)",
+    "speaker": "Aiden",
+    "language": "English",
+    "instruction": "Speak in a warm, engaged, conversational teaching voice. Match the emotion to the meaning: sound curious when asking, encouraging after effort, gently emphatic for key ideas, and calm when correcting. Use natural pitch variation, connected phrasing, and brief pauses at punctuation. Avoid theatrical emotion, sing-song cadence, audiobook narration, and long dramatic pauses."
+  }
+}
