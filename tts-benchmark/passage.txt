@@ -1,0 +1,13 @@
+Let's explore how neural networks actually learn. Imagine you're trying to teach a computer to recognize handwritten digits.
+
+At first, the network makes predictions that are essentially guesses. But after every prediction, we calculate how wrong it was using something called a loss function.
+
+Here's where things get interesting. Through backpropagation, we calculate how much each parameter contributed to that error. We then use gradient descent to update those parameters.
+
+Think of it like walking down a mountain in thick fog. You can't see the entire landscape, but you can measure which direction slopes downward.
+
+Now consider the computational complexity. An algorithm that takes O of n log n operations scales very differently from one that takes n squared operations.
+
+And that distinction becomes extremely important when you're working with millions of data points.
+
+So, here's a question for you. Why do you think taking a larger step downhill doesn't always help us reach the minimum faster?
