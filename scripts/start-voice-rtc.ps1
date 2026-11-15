@@ -1,8 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $runtime = Join-Path $root 'tts-benchmark/runtime'
-$pythonPath = Join-Path $runtime 'asr-python.path'
-$python = if (Test-Path $pythonPath) { (Get-Content $pythonPath -Raw).Trim() } else { Join-Path $runtime 'asr/Scripts/python.exe' }
+$python = @((Join-Path $runtime 'asr/Scripts/python.exe'), (Join-Path $runtime 'asr-check/Scripts/python.exe')) | Where-Object { Test-Path $_ } | Select-Object -First 1
 $pidPath = Join-Path $runtime 'voice-rtc.pid'
 $logPath = Join-Path $runtime 'voice-rtc.log'
 if (-not (Test-Path $python)) { throw 'Run .\scripts\setup-voice.ps1 first.' }
