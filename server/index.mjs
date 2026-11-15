@@ -365,6 +365,10 @@ function extractWebPage(buffer, sourceUrl) {
   return { title, sourceUrl, pdfUrl: '', fileName: '', sourceKind: 'web', sourceSegments: segments, pageCount: segments.length, characterCount: combined.length, text }
 }
 
+function isAccessInterstitial(text = '') {
+  return /enable\s+(?:all\s+)?cookies|cookies?\s+(?:are\s+)?required|accept\s+(?:all\s+)?cookies|cookie\s+(?:consent|preferences)|enable\s+javascript|javascript\s+(?:is\s+)?required|checking your browser|verify you are (?:human|not a robot)|access denied|request blocked|captcha|before you continue/i.test(text.slice(0, 5000))
+}
+
 async function extractSparseWebPageWithExa(sourceUrl) {
   const apiKey = process.env.EXA_API_KEY?.trim()
   if (!apiKey) return null
@@ -825,10 +829,11 @@ app.post('/api/ingest/web', async (req, res) => {
       if (!(error instanceof Error) || !error.message.includes('no readable text')) throw error
     }
     // shortcut: under 500 local characters signals a likely partial page, raise this threshold if short pages are often incomplete.
-    if (!result || result.characterCount < 500) {
+    const blockedByInterstitial = result && isAccessInterstitial(result.text)
+    if (!result || result.characterCount < 500 || blockedByInterstitial) {
       try {
         const exaResult = await extractSparseWebPageWithExa(fetched.finalUrl)
-        if (exaResult && (!result || exaResult.characterCount > result.characterCount)) result = exaResult
+        if (exaResult && (!result || (blockedByInterstitial && !isAccessInterstitial(exaResult.text)) || exaResult.characterCount > result.characterCount)) result = exaResult
       } catch { /* Keep the locally extracted page if Exa is unavailable. */ }
     }
     if (!result) throw new Error('The web page has no readable text.')
