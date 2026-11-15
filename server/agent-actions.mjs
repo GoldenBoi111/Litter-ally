@@ -50,9 +50,10 @@ export const diagramPlanSchema = {
         anyOf: [
           {
             type: 'object', additionalProperties: false,
-            required: ['_type', 'id', 'shape', 'text', 'color'],
+            required: ['_type', 'id', 'shape', 'text', 'color', 'x', 'y'],
             properties: {
               _type: { type: 'string', const: 'create' }, id: { type: 'string' }, shape: { type: 'string', enum: shapeKinds },
+              x: { type: 'number', minimum: 0, maximum: 2940 }, y: { type: 'number', minimum: 0, maximum: 2040 },
               text: { type: 'string', maxLength: 72 }, color: { type: 'string', enum: colors },
             },
           },
@@ -81,6 +82,7 @@ export const diagramPlanSchema = {
               color: { type: 'string', enum: colors }, size: { type: 'string', enum: textSizes },
             },
           },
+          arrowActionSchema,
         ],
       },
     },
@@ -149,6 +151,13 @@ function finiteNumber(value) {
   return typeof value === 'number' && Number.isFinite(value)
 }
 
+function validArrowAction(action) {
+  const point = value => value && finiteNumber(value.x) && finiteNumber(value.y) && value.x >= 0 && value.x <= 1200 && value.y >= 0 && value.y <= 700
+  return point(action.from) && point(action.to) && (action.from.x !== action.to.x || action.from.y !== action.to.y) &&
+    typeof action.label === 'string' && Boolean(action.label.trim()) && action.label.length <= 48 &&
+    colors.includes(action.color) && finiteNumber(action.bend) && Math.abs(action.bend) <= 260 && typeof action.both === 'boolean'
+}
+
 export function validateDiagramPlan(value) {
   if (!value || typeof value !== 'object' || !Array.isArray(value.actions)) {
     throw new Error('OpenAI returned an invalid diagram plan.')
@@ -164,13 +173,13 @@ export function validateDiagramPlan(value) {
   for (const action of value.actions) {
     if (!action || typeof action !== 'object' || !validId(action.id) || actionIds.has(action.id)) throw new Error('The diagram contains an invalid or duplicate action id.')
     actionIds.add(action.id)
-    const actionMode = ['create', 'connect'].includes(action._type) ? 'nodes' : ['stroke', 'text'].includes(action._type) ? 'freehand' : null
+    const actionMode = ['create', 'connect'].includes(action._type) ? 'nodes' : ['stroke', 'text', 'arrow'].includes(action._type) ? 'freehand' : null
     if (!actionMode) throw new Error(`Unsupported diagram action: ${String(action._type)}`)
     if (mode && mode !== actionMode) throw new Error('A diagram must use either freehand marks or connected shapes, not both.')
     mode = actionMode
     if (action._type === 'create') {
       if (sawConnection) throw new Error('Create all diagram shapes before connecting them.')
-      if (!shapeKinds.includes(action.shape) || !colors.includes(action.color) || typeof action.text !== 'string' || !action.text.trim() || action.text.length > 72) {
+      if (!shapeKinds.includes(action.shape) || !colors.includes(action.color) || !finiteNumber(action.x) || action.x < 0 || action.x > 2940 || !finiteNumber(action.y) || action.y < 0 || action.y > 2040 || typeof action.text !== 'string' || !action.text.trim() || action.text.length > 72) {
         throw new Error('The diagram contains an invalid create action.')
       }
       if (created.size === 8) throw new Error('A diagram can contain at most eight shapes.')
@@ -196,6 +205,8 @@ export function validateDiagramPlan(value) {
       if (!validBeatId(action.id) || !Number.isInteger(action.atMs) || action.atMs < 0 || action.atMs > 12000 ||
           !finiteNumber(action.x) || !finiteNumber(action.y) || action.x < 0 || action.x > 1200 || action.y < 0 || action.y > 700 || typeof action.text !== 'string' || !action.text.trim() || action.text.length > 180 ||
           !colors.includes(action.color) || !textSizes.includes(action.size)) throw new Error('The diagram contains invalid editable text.')
+    } else if (action._type === 'arrow') {
+      if (!validArrowAction(action)) throw new Error('The diagram contains an invalid labelled arrow.')
     } else {
       throw new Error(`Unsupported diagram action: ${String(action._type)}`)
     }
@@ -265,12 +276,7 @@ export function validateTeachingBeat(value) {
       if (!finiteNumber(action.x) || !finiteNumber(action.y) || action.x < 0 || action.x > 1200 || action.y < 0 || action.y > 700 || typeof action.text !== 'string' || !action.text.trim() || action.text.length > 180 ||
           !colors.includes(action.color) || !textSizes.includes(action.size)) throw new Error('The teaching beat contains invalid editable text.')
     } else if (action._type === 'arrow') {
-      const point = value => value && finiteNumber(value.x) && finiteNumber(value.y) && value.x >= 0 && value.x <= 1200 && value.y >= 0 && value.y <= 700
-      if (!point(action.from) || !point(action.to) || (action.from.x === action.to.x && action.from.y === action.to.y) ||
-          typeof action.label !== 'string' || !action.label.trim() || action.label.length > 48 ||
-          !colors.includes(action.color) || !finiteNumber(action.bend) || Math.abs(action.bend) > 260 || typeof action.both !== 'boolean') {
-        throw new Error('The teaching beat contains an invalid labelled arrow.')
-      }
+      if (!validArrowAction(action)) throw new Error('The teaching beat contains an invalid labelled arrow.')
     } else if (action._type === 'remove') {
       if (!validBeatId(action.targetId)) throw new Error('The teaching beat contains an invalid revision target.')
     } else if (action._type === 'move') {

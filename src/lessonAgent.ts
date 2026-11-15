@@ -143,9 +143,9 @@ export function formatCheckpointBrief(brief: CheckpointBrief) {
 }
 
 type DiagramAction =
-  | { _type: 'create'; id: string; shape: 'box' | 'ellipse' | 'diamond' | 'note' | 'text'; text: string; color: string }
+  | { _type: 'create'; id: string; shape: 'box' | 'ellipse' | 'diamond' | 'note' | 'text'; text: string; color: string; x: number; y: number }
   | { _type: 'connect'; id: string; fromId: string; toId: string; label: string; color: string }
-  | Extract<TeachingAction, { _type: 'stroke' | 'text' }>
+  | Extract<TeachingAction, { _type: 'stroke' | 'text' | 'arrow' }>
 
 export type DiagramPlan = { actions: DiagramAction[] }
 export type TeachingAction =
@@ -250,31 +250,34 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
     .filter(shape => shape.meta?.owner === 'agent' && shape.meta?.lessonId === context.lessonId && shape.meta?.diagramId === diagramId)
   const boardStart = conceptRegion(editor, context.lessonId, context.checkpointIndex)
 
-  if (plan.actions.some(action => action._type === 'stroke' || action._type === 'text')) {
+  if (plan.actions.some(action => action._type === 'stroke' || action._type === 'text' || action._type === 'arrow')) {
     const interruptedShape = existing.find(shape => shape.meta?.actionState === 'interrupted')
     const interruptedGeneration = interruptedShape?.meta?.generationId
     const generationId = typeof interruptedGeneration === 'string' ? interruptedGeneration : crypto.randomUUID()
     const origin = interruptedShape && typeof interruptedShape.meta?.originX === 'number' && typeof interruptedShape.meta?.originY === 'number'
       ? { x: interruptedShape.meta.originX, y: interruptedShape.meta.originY }
-      : clearBeatOrigin(editor, { actions: plan.actions.filter((action): action is Extract<TeachingAction, { _type: 'stroke' | 'text' }> => action._type === 'stroke' || action._type === 'text') }, boardStart, true)
-    for (let start = 0; start < plan.actions.length; start += 12) {
+      : clearBeatOrigin(editor, { actions: plan.actions.filter((action): action is Extract<TeachingAction, { _type: 'stroke' | 'text' | 'arrow' }> => action._type === 'stroke' || action._type === 'text' || action._type === 'arrow') }, boardStart, true)
+    for (let start = 0; start < plan.actions.length;) {
+      let end = Math.min(start + 12, plan.actions.length)
+      if (end < plan.actions.length && plan.actions[end - 2]?._type === 'text' && plan.actions[end - 1]?._type === 'arrow' && plan.actions[end]?._type === 'text') end -= 2
       await applyTeachingBeat(editor, {
         beatId: `diagram_${diagramId.replaceAll('-', '_')}_${generationId.replaceAll('-', '')}_${start}`,
         context: 'Drawing a visual explanation.', speech: 'Drawing a visual explanation.', pauseMs: 0, waitForLearner: false,
-        placement: 'continue', anchorBeatId: '', actions: plan.actions.slice(start, start + 12) as TeachingAction[],
+        placement: 'continue', anchorBeatId: '', actions: plan.actions.slice(start, end) as TeachingAction[],
       }, {
         lessonId: context.lessonId, checkpointIndex: context.checkpointIndex, signal: context.signal, onAction: context.onAction, onCursor: context.onCursor,
         diagramId, generationId, origin, pace: DIAGRAM_PACE,
       })
+      start = end
     }
     return
   }
 
   const nodes = plan.actions.filter((action): action is Extract<DiagramAction, { _type: 'create' }> => action._type === 'create')
-  const columns = context.diagramKind === 'comparison' ? 2 : ['flow', 'timeline'].includes(context.diagramKind) ? Math.min(4, nodes.length) : Math.min(3, Math.ceil(Math.sqrt(nodes.length)))
-  const cell = { w: 900, h: 600 }
+  const minX = Math.min(...nodes.map(node => node.x)), minY = Math.min(...nodes.map(node => node.y))
+  const maxX = Math.max(...nodes.map(node => node.x + 660)), maxY = Math.max(...nodes.map(node => node.y + 360))
   const { x: xOffset, y: yOffset } = clearBeatOrigin(editor, {
-    actions: [{ _type: 'stroke', id: 'area', atMs: 0, points: [{ x: 0, y: 0 }, { x: columns * cell.w, y: Math.ceil(nodes.length / columns) * cell.h }], color: 'black', size: 'm', closed: false }],
+    actions: [{ _type: 'stroke', id: 'area', atMs: 0, points: [{ x: minX, y: minY }, { x: maxX, y: maxY }], color: 'black', size: 'm', closed: false }],
   }, boardStart, true)
   const created = new Map<string, { id: TLShapeId; point: AgentCursorPoint; bounds: { x: number; y: number; w: number; h: number } }>()
   const createdIds: TLShapeId[] = []
@@ -282,21 +285,16 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
   const generationId = crypto.randomUUID()
   const meta = { owner: 'agent', lessonId: context.lessonId, checkpointId: String(context.checkpointIndex), diagramId, generationId }
 
-  let nodeIndex = 0
   for (const action of plan.actions) {
     if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
     const id = createShapeId(`lesson-${context.lessonId}-${diagramId}-${generationId}-${action.id}`)
     if (action._type === 'create') {
-      const row = Math.floor(nodeIndex / columns)
-      const offsetColumn = nodeIndex % columns
-      const column = offsetColumn
-      const x = xOffset + column * cell.w + 120
-      const y = yOffset + row * cell.h + 120
+      const x = xOffset + action.x
+      const y = yOffset + action.y
       const point = { x: x + 330, y: y + 180 }
       editor.centerOnPoint(point, { animation: { duration: 220 } })
       await guideCursor(context.onCursor, cursorPoint, point, context.signal)
       cursorPoint = point
-      nodeIndex += 1
       const geo = action.shape === 'ellipse' ? 'ellipse' : action.shape === 'diamond' ? 'diamond' : 'rectangle'
       editor.createShape({
         id, type: 'geo', x, y, meta,
@@ -318,14 +316,16 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
       const dx = to.point.x - from.point.x
       const dy = to.point.y - from.point.y
       const horizontal = Math.abs(dx) >= Math.abs(dy)
-      const fromAnchor = horizontal ? { x: dx >= 0 ? 1 : 0, y: 0.5 } : { x: 0.5, y: dy >= 0 ? 1 : 0 }
-      const toAnchor = horizontal ? { x: dx >= 0 ? 0 : 1, y: 0.5 } : { x: 0.5, y: dy >= 0 ? 0 : 1 }
+      const fromRight = dx >= 0
+      const fromBottom = dy >= 0
       const start = horizontal
-        ? { x: from.point.x + (dx >= 0 ? from.bounds.w / 2 : -from.bounds.w / 2), y: from.point.y }
-        : { x: from.point.x, y: from.point.y + (dy >= 0 ? from.bounds.h / 2 : -from.bounds.h / 2) }
+        ? { x: from.bounds.x + (fromRight ? from.bounds.w : 0), y: from.bounds.y + from.bounds.h / 2 }
+        : { x: from.bounds.x + from.bounds.w / 2, y: from.bounds.y + (fromBottom ? from.bounds.h : 0) }
       const end = horizontal
-        ? { x: to.point.x + (dx >= 0 ? -to.bounds.w / 2 : to.bounds.w / 2), y: to.point.y }
-        : { x: to.point.x, y: to.point.y + (dy >= 0 ? -to.bounds.h / 2 : to.bounds.h / 2) }
+        ? { x: to.bounds.x + (fromRight ? 0 : to.bounds.w), y: to.bounds.y + to.bounds.h / 2 }
+        : { x: to.bounds.x + to.bounds.w / 2, y: to.bounds.y + (fromBottom ? 0 : to.bounds.h) }
+      const fromAnchor = horizontal ? { x: fromRight ? 1 : 0, y: 0.5 } : { x: 0.5, y: fromBottom ? 1 : 0 }
+      const toAnchor = horizontal ? { x: fromRight ? 0 : 1, y: 0.5 } : { x: 0.5, y: fromBottom ? 0 : 1 }
       editor.centerOnPoint(from.point, { animation: { duration: 220 } })
       await guideCursor(context.onCursor, cursorPoint, from.point, context.signal)
       cursorPoint = from.point
@@ -336,10 +336,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
         props: { kind: 'arc', start: { x: 0, y: 0 }, end: { x: end.x - start.x, y: end.y - start.y }, bend: 0, color: action.color, size: 'm', scale: 1, richText: toRichText(action.label), arrowheadEnd: 'arrow' },
       } as any)
       for (const [terminal, target, normalizedAnchor] of [['start', from.id, fromAnchor], ['end', to.id, toAnchor]] as const) {
-        editor.createBinding({
-          type: 'arrow', fromId: id, toId: target,
-          props: { terminal, isExact: false, isPrecise: true, normalizedAnchor, snap: 'none' },
-        })
+        editor.createBinding({ type: 'arrow', fromId: id, toId: target, props: { terminal, isExact: false, isPrecise: true, normalizedAnchor, snap: 'none' } })
       }
       createdIds.push(id)
       context.onAction?.(`Connected ${action.fromId} to ${action.toId}`)
@@ -548,7 +545,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
     const bounds = editor.getShapePageBounds(shape)
     return bounds ? [{ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }] : []
   })
-  const textActions = context.diagramId ? [] : beat.actions.filter((action): action is Extract<TeachingAction, { _type: 'text' }> => action._type === 'text').sort((a, b) => a.y - b.y || a.x - b.x)
+  const textActions = beat.actions.filter((action): action is Extract<TeachingAction, { _type: 'text' }> => action._type === 'text').sort((a, b) => a.y - b.y || a.x - b.x)
   for (const action of textActions) {
     const mark = beatMarkBounds({ actions: [action] })[0]
     const shapeId = createShapeId(`lesson-${context.lessonId}-${context.checkpointIndex}-${beat.beatId}-${action.id}`)
