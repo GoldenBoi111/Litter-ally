@@ -110,7 +110,7 @@ export async function importMediaSource(file: File, onProgress: (message: string
   finally { await context.close() }
   const duration = decoded.duration
   const chunkSeconds = 30
-  if (!Number.isFinite(duration) || duration < 0.1 || duration > 600) throw new Error('Audio and video transcription is limited to 10 minutes per file.')
+  if (!Number.isFinite(duration) || duration < 0.1 || duration > 600) throw new Error('Media transcription is limited to 10 minutes per file.')
   const segments: SourceSegment[] = []
   const sourceFrames: Array<{ timeSeconds: number; data: Blob }> = []
   let video: HTMLVideoElement | undefined
@@ -123,7 +123,7 @@ export async function importMediaSource(file: File, onProgress: (message: string
     video.src = objectUrl
     await new Promise<void>((resolve, reject) => {
       video!.onloadedmetadata = () => resolve()
-      video!.onerror = () => reject(new Error('This video format could not be opened in the browser.'))
+      video!.onerror = () => reject(new Error('This media format could not be opened in the browser.'))
     })
   }
   try {
