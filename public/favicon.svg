@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <g fill="none" stroke="#2a2420" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M5.2 8.6C10 7.9 21.5 7.7 26.9 8.5"/>
-    <path d="M12.6 8.1c-.2-2.2.6-3 3.4-3s3.6.8 3.4 2.9"/>
-    <path d="m7.1 9.3 1.7 17.9c.2 1 .8 1.4 1.8 1.4l11-.1c.9 0 1.5-.5 1.6-1.4l1.7-17.7" fill="#fbf6e9"/>
-    <path d="m11.4 12.6.7 12.6m8.5-12.6-.7 12.6" opacity=".55"/>
+    <path d="M5.2 8.6 C10 7.9, 21.5 7.7, 26.9 8.5"/>
+    <path d="M12.6 8.1 C12.4 5.9, 13.2 5.1, 16 5.1 C18.9 5.0, 19.6 5.9, 19.4 8.0"/>
+    <path d="M7.1 9.3 L8.8 27.2 C9 28.2, 9.6 28.6, 10.6 28.6 L21.6 28.5 C22.5 28.5, 23.1 28.0, 23.2 27.1 L24.9 9.4" fill="#fbf6e9"/>
+    <path d="M11.4 12.6 L12.1 25.2 M20.6 12.6 L19.9 25.2" opacity=".55"/>
   </g>
-  <path d="M24.9 4.66c.7 3.5 1.4 4.1 4.9 4.74-3.5.7-4.2 1.4-4.9 4.9-.7-3.5-1.4-4.2-4.9-4.9 3.5-.64 4.2-1.24 4.9-4.74Z" fill="#f2c230" stroke="#2a2420" stroke-width=".9" stroke-linejoin="round"/>
+  <path d="M24.9 5.7 C25.4 8.2 26.1 8.9 28.6 9.4 C26.1 9.9 25.4 10.6 24.9 13.1 C24.4 10.6 23.7 9.9 21.2 9.4 C23.7 8.9 24.4 8.2 24.9 5.7 Z" fill="#f2c230" stroke="#2a2420" stroke-width=".9" stroke-linejoin="round" transform="translate(0 -1.04) translate(24.9 9.4) scale(1.4) translate(-24.9 -9.4)"/>
 </svg>
