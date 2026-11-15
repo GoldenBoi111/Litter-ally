@@ -36,6 +36,21 @@ function useDraggable() {
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
   }
   const reset = () => { localStorage.removeItem(POS_KEY); setPos(null) }
+  // A position saved on a bigger window would leave the bar off the canvas, so clamp it back inside on open and resize.
+  useEffect(() => {
+    const clamp = () => setPos(current => {
+      const el = ref.current, parent = el?.offsetParent as HTMLElement | null
+      if (!current || !el || !parent) return current
+      const x = Math.min(Math.max(0, current.x), Math.max(0, parent.clientWidth - el.offsetWidth))
+      const y = Math.min(Math.max(0, current.y), Math.max(0, parent.clientHeight - el.offsetHeight))
+      if (x === current.x && y === current.y) return current
+      localStorage.setItem(POS_KEY, JSON.stringify({ x, y }))
+      return { x, y }
+    })
+    clamp()
+    window.addEventListener('resize', clamp)
+    return () => window.removeEventListener('resize', clamp)
+  }, [])
   return { ref, pos, onGripDown, reset }
 }
 
