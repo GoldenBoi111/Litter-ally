@@ -317,7 +317,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
       cursorPoint = to.point
       editor.createShape({
         id, type: 'arrow', x: 0, y: 0, meta,
-        props: { kind: 'elbow', start: { x: 0, y: 0 }, end: { x: 80, y: 80 }, color: action.color, size: 'm', scale: 1, richText: toRichText(action.label), arrowheadEnd: 'arrow' },
+        props: { kind: 'elbow', start: { x: 0, y: 0 }, end: { x: 80, y: 80 }, color: action.color, size: 'm', scale: 3, richText: toRichText(action.label), arrowheadEnd: 'arrow' },
       } as any)
       for (const [terminal, target] of [['start', from.id], ['end', to.id]] as const) {
         editor.createBinding({
@@ -644,7 +644,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       cursorPoint = tail
       const arrowProps = (fraction: number, labelled: boolean) => ({
         kind: 'arc', start: { x: 0, y: 0 }, end: at(fraction), bend: action.bend * fraction,
-        color: action.color, labelColor: action.color, size: 'm', scale: 1, font: 'draw', dash: 'draw', fill: 'none',
+        color: action.color, labelColor: action.color, size: 'm', scale: 3, font: 'draw', dash: 'draw', fill: 'none',
         arrowheadStart: action.both ? 'arrow' : 'none', arrowheadEnd: 'arrow', labelPosition: 0.5,
         richText: toRichText(labelled ? action.label : ''),
       })
