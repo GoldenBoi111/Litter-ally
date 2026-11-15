@@ -153,6 +153,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
   /** Diagrams draw in the background while beats run, so they get their own abort handle. */
   const diagramAbortRef = useRef<AbortController | null>(null)
   const agentCursorRef = useRef<HTMLDivElement>(null)
+  const agentCursorPointRef = useRef<{ x: number; y: number } | null>(null)
   const agentCursorHideRef = useRef<number | undefined>(undefined)
   const selectionCleanupRef = useRef<(() => void) | null>(null)
   const [papers, setPapers] = useState<ImportedPaper[]>([])
@@ -287,19 +288,26 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
   const learnerKnowledge = useMemo(() => latestConceptEvidence(learnerEvidence), [learnerEvidence])
   const [status, setStatus] = useState(notice || 'Your library is saved to your account')
 
-  const showAgentCursor = useCallback((point: { x: number; y: number }) => {
+  const positionAgentCursor = useCallback((point: { x: number; y: number }) => {
     const cursor = agentCursorRef.current
     const editor = editorRef.current
     if (!cursor || !editor) return
-    window.clearTimeout(agentCursorHideRef.current)
     const viewportPoint = editor.pageToViewport(point)
     cursor.style.transform = `translate(${viewportPoint.x - 3}px, ${viewportPoint.y - 1.5}px)`
+  }, [])
+  const showAgentCursor = useCallback((point: { x: number; y: number }) => {
+    const cursor = agentCursorRef.current
+    if (!cursor) return
+    agentCursorPointRef.current = point
+    window.clearTimeout(agentCursorHideRef.current)
+    positionAgentCursor(point)
     cursor.classList.remove('is-leaving')
     cursor.hidden = false
-  }, [])
+  }, [positionAgentCursor])
   const hideAgentCursor = useCallback(() => {
     const cursor = agentCursorRef.current
     if (!cursor) return
+    agentCursorPointRef.current = null
     cursor.classList.add('is-leaving')
     window.clearTimeout(agentCursorHideRef.current)
     agentCursorHideRef.current = window.setTimeout(() => { cursor.hidden = true }, 220)
@@ -1295,6 +1303,9 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
               selectionCleanupRef.current?.()
               editorRef.current = editor
               if (currentPaper) initializePaperCanvas(editor, currentPaper)
+              return editor.store.listen(() => {
+                if (agentCursorPointRef.current) positionAgentCursor(agentCursorPointRef.current)
+              }, { scope: 'session' })
             }} autoFocus />}
             <div ref={agentCursorRef} className="agent-cursor" aria-hidden="true" hidden>
               <svg viewBox="0 0 20 24" focusable="false"><path d="M2 1v19l5-5 4 8 3-1.5-4-8H17L2 1z" /></svg>

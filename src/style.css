@@ -27,7 +27,7 @@
 .tutor-tab-list{display:flex;flex:none;width:100%;padding:0 var(--spacing-3);border-bottom:var(--border-width) solid var(--color-border)}
 .tutor-tab-content{display:flex;flex:1;min-height:0;flex-direction:column;overflow:hidden}
 .knowledge-graph-tab{overflow-y:auto}
-.agent-cursor{position:absolute;z-index:4;top:0;left:0;display:flex;align-items:flex-start;gap:8px;pointer-events:none;transition:transform 14ms linear,opacity 180ms ease}
+.agent-cursor{position:absolute;z-index:4;top:0;left:0;display:flex;align-items:flex-start;gap:8px;pointer-events:none;transition:opacity 180ms ease}
 .agent-cursor[hidden]{display:none}
 .agent-cursor.is-leaving{opacity:0}
 .agent-cursor svg{width:30px;height:36px;overflow:visible;filter:drop-shadow(0 1px 1px #0004)}
