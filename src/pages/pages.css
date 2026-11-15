@@ -207,7 +207,7 @@
 @media (max-width: 1100px) { .lesson-bar { flex-wrap: wrap; } }
 
 .lesson-text-chat {
-  position: absolute; left: 0; bottom: calc(100% + 12px); z-index: 401;
+  position: absolute; left: 0; top: calc(100% + 12px); z-index: 401;
   display: flex; flex-direction: column; gap: 8px; width: min(360px, calc(100vw - 32px));
   max-height: min(42vh, 360px); padding: 12px; overflow: hidden;
   color: var(--ll-ink, #2a2420); background: var(--ll-paper, #f8f5ee);
