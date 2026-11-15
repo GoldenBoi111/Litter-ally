@@ -283,7 +283,7 @@ function compiledSubagent(name, description, run) {
 
 const COORDINATOR_PROMPT = `You coordinate a teaching team that turns one source into a course. Work in exactly this order, one step per turn:
 1. Call dispatch_readers once. It reads every slice of the source in parallel and reports notes written and concepts readers could not ground.
-2. If missingConcepts is not empty, call resolve_missing_concepts once with them (at most 8). It searches within the project budget and caches results.
+2. If missingConcepts is not empty, deduplicate them and call resolve_missing_concepts once with the 8 concepts the learner most needs to understand the source. The tool accepts at most 8 concepts. It searches within the project budget and caches results.
 3. Delegate to the "synthesis" subagent with the task tool.
 4. Delegate to the "planner" subagent with the task tool.
 5. Reply with one short line saying the plan is ready.
