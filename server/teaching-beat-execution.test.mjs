@@ -14,7 +14,7 @@ compiled = compiled
   .replace(/from ["']@tldraw\/tlschema["']/, `from ${JSON.stringify(schemaMock)}`)
   .replace(/from ["']\.\.\/server\/agent-actions\.mjs["']/, `from ${JSON.stringify(new URL('./agent-actions.mjs', import.meta.url).href)}`)
   .replace(/from ["']\.\/storage["']/, `from ${JSON.stringify(storageMock)}`)
-const { applyDiagramPlan, applyTeachingBeat, getSelectionContext, getWhiteboardContext } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+const { applyDiagramPlan, applyTeachingBeat, clearConceptMarks, conceptRegion, getSelectionContext, getWhiteboardContext } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
 test('installed tldraw schema accepts the native compressed pen segments', () => {
   const segments = compressLegacySegments([{ type: 'free', points: [{ x: 0, y: 0, z: 0.5 }, { x: 20, y: 10, z: 0.5 }] }])
@@ -204,4 +204,33 @@ test('describes the latest drawing area with local positions and learner marks',
   assert.equal(context.learner[0].x, 50)
   assert.deepEqual(context.nearby[0], { anchorBeatId: 'earlier', dx: 0, dy: -140, labels: ['earlier idea'] })
   assert.equal(JSON.stringify(context).includes('private other lesson'), false)
+})
+
+test('a fresh concept starts clear of the work another concept left in its column', async () => {
+  const spilled = { id: 'shape:spilled', type: 'draw', meta: { owner: 'agent', lessonId: 'paper', checkpointId: '0', beatId: 'earlier', originX: 1100, originY: 220 }, bounds: { x: 3400, y: 200, w: 700, h: 400 } }
+  const editor = fakeEditor([spilled])
+  await applyTeachingBeat(editor, { ...beat(2), actions: [beat(2).actions[0]] }, { lessonId: 'paper', checkpointIndex: 1, signal: new AbortController().signal })
+  const fresh = [...editor.shapes.values()].find(shape => shape.meta?.beatId === 'derive_one')
+  assert.ok(fresh.meta.originY > spilled.bounds.y + spilled.bounds.h, 'the new concept moves clear of the finished one')
+  assert.ok(fresh.y > spilled.bounds.y + spilled.bounds.h, 'nothing is drawn over the finished concept')
+})
+
+test('restarting a concept removes every tutor mark it made and keeps the rest of the board', () => {
+  const own = { id: 'shape:own', type: 'draw', meta: { owner: 'agent', lessonId: 'paper', checkpointId: '0' }, bounds: { x: 1100, y: 220, w: 100, h: 100 } }
+  const material = { id: 'shape:page', type: 'image', meta: { owner: 'source', paperId: 'paper', checkpointId: '0' }, bounds: { x: 0, y: 220, w: 900, h: 900 } }
+  const learner = { id: 'shape:learner', type: 'draw', meta: {}, bounds: { x: 1400, y: 300, w: 80, h: 80 } }
+  const later = { id: 'shape:later', type: 'draw', meta: { owner: 'agent', lessonId: 'paper', checkpointId: '1' }, bounds: { x: 3500, y: 220, w: 80, h: 80 } }
+  const editor = fakeEditor([own, material, learner, later])
+  assert.equal(clearConceptMarks(editor, 'paper', 0), 2)
+  assert.deepEqual([...editor.shapes.keys()], [learner.id, later.id])
+  const region = conceptRegion(editor, 'paper', 0)
+  assert.ok(region.y > learner.bounds.y, 'the restarted concept begins on board that is actually empty')
+})
+
+test('a full drawing area makes the tutor move on instead of piling ink into it', async () => {
+  const full = { id: 'shape:full', type: 'draw', meta: { owner: 'agent', lessonId: 'paper', checkpointId: '0', beatId: 'earlier', originX: 1100, originY: 220 }, bounds: { x: 1100, y: 220, w: 600, h: 900 } }
+  const editor = fakeEditor([full])
+  await applyTeachingBeat(editor, { ...beat(2), beatId: 'later', placement: 'continue', actions: [beat(2).actions[0]] }, { lessonId: 'paper', checkpointIndex: 0, signal: new AbortController().signal })
+  const later = [...editor.shapes.values()].find(shape => shape.meta?.beatId === 'later')
+  assert.ok(later.meta.originY >= full.bounds.y + full.bounds.h, 'the next beat starts below the filled area')
 })
