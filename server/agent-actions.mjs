@@ -16,7 +16,7 @@ const widgetActionSchema = {
     title: { type: 'string', minLength: 1, maxLength: 80 },
     labels: { type: 'array', maxItems: 12, items: shortText },
     series: { type: 'array', maxItems: 4, items: { type: 'object', additionalProperties: false, required: ['name', 'values'], properties: { name: shortText, values: { type: 'array', maxItems: 12, items: { type: 'number' } } } } },
-    rows: { type: 'array', maxItems: 10, items: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 120 } } },
+    rows: { type: 'array', description: 'For a table, use one cell per column label in every row (for example ["California", "Sacramento"] for State and Capital city); do not put pipe-separated cells into one string. For a timeline, use [when, what] pairs.', maxItems: 10, items: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 120 } } },
     unit: { type: 'string', maxLength: 12 },
   },
 }
