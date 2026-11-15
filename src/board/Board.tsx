@@ -219,24 +219,27 @@ export function Board({ canvasKey, papers, summaries, synthesis, hiddenConnectio
           if (import.meta.env.DEV) Object.assign(window, { boardEditor: ed }) // for local UI checks
         }}
       />
-      {papers.length > 0 && <button className="board-fit" onClick={() => editor?.zoomToFit({ animation: { duration: 320 } })}>Fit board</button>}
-      {(analysisError || analysisStatus) && <div className="board-analysis" role="status">{analysisError ? <>{analysisError} <button onClick={onRetry}>Retry connections</button></> : analysisStatus}</div>}
-      {synthesis && <details className="board-connections">
-        <summary>Connections ({synthesis.connections.length})</summary>
-        <p>{synthesis.synthesis}</p>
-        {synthesis.connections.length > 0 && <ul>{synthesis.connections.map((connection, index) => {
-          const left = papers.find(paper => paper.id === connection.leftId)
-          const right = papers.find(paper => paper.id === connection.rightId)
-          if (!left || !right) return null
-          return <li key={`${connection.leftId}:${connection.rightId}:${index}`}>
-            <button onClick={() => onCompare(left.id, right.id)} aria-label={`Compare ${left.title} and ${right.title}: ${connection.relation}`}>
-              <span><b>{left.title}</b> <i>{connection.relation}</i> <b>{right.title}</b></span>
-              <small>{connection.reason}</small>
-            </button>
-          </li>
-        })}</ul>}
-        {hiddenConnectionPairs.length > 0 && <button className="board-restore" onClick={onRestoreHiddenConnections}>Restore {hiddenConnectionPairs.length} hidden {hiddenConnectionPairs.length === 1 ? 'connection' : 'connections'}</button>}
-      </details>}
+      {/* One rail stacks the board's own chrome in a column, so these panels can never land on each other. */}
+      <div className="board-rail">
+        {papers.length > 0 && <button className="board-fit" onClick={() => editor?.zoomToFit({ animation: { duration: 320 } })}>Fit board</button>}
+        {(analysisError || analysisStatus) && <div className="board-analysis" role="status">{analysisError ? <>{analysisError} <button onClick={onRetry}>Retry connections</button></> : analysisStatus}</div>}
+        {synthesis && <details className="board-connections">
+          <summary>Connections ({synthesis.connections.length})</summary>
+          <p>{synthesis.synthesis}</p>
+          {synthesis.connections.length > 0 && <ul>{synthesis.connections.map((connection, index) => {
+            const left = papers.find(paper => paper.id === connection.leftId)
+            const right = papers.find(paper => paper.id === connection.rightId)
+            if (!left || !right) return null
+            return <li key={`${connection.leftId}:${connection.rightId}:${index}`}>
+              <button onClick={() => onCompare(left.id, right.id)} aria-label={`Compare ${left.title} and ${right.title}: ${connection.relation}`}>
+                <span><b>{left.title}</b> <i>{connection.relation}</i> <b>{right.title}</b></span>
+                <small>{connection.reason}</small>
+              </button>
+            </li>
+          })}</ul>}
+          {hiddenConnectionPairs.length > 0 && <button className="board-restore" onClick={onRestoreHiddenConnections}>Restore {hiddenConnectionPairs.length} hidden {hiddenConnectionPairs.length === 1 ? 'connection' : 'connections'}</button>}
+        </details>}
+      </div>
       {!papers.length && (
         <div className="board-empty">
           <p>Your board is empty.</p>
