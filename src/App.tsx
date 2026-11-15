@@ -722,7 +722,9 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     setCheckpointIndex(next)
     await persistLessonState(activePlan, next)
     checkpointTranscriptStartRef.current = transcriptRef.current.length
-    return formatCheckpointBrief(buildCheckpointBrief(activePlan, next, knowledgeGraphRef.current, learnerEvidenceRef.current, currentPaper?.pageCount))
+    const brief = buildCheckpointBrief(activePlan, next, knowledgeGraphRef.current, learnerEvidenceRef.current, currentPaper?.pageCount)
+    tutorRef.current?.setCheckpointBrief(brief)
+    return formatCheckpointBrief(brief)
   }, [currentPaper, persistLessonState, persistTaughtCheckpoint])
 
   // "Restart this concept" / "go back a step": wipe the tutor's marks for that concept (learner marks stay) and start it over.
@@ -1153,7 +1155,9 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     if (nextIndex !== index) checkpointTranscriptStartRef.current = transcriptRef.current.length
     checkpointIndexRef.current = nextIndex
     setCheckpointIndex(nextIndex)
-    tutorRef.current?.updateCheckpointBrief(buildCheckpointBrief(nextPlan, nextIndex, graph, learnerEvidenceRef.current, paper.pageCount))
+    const brief = buildCheckpointBrief(nextPlan, nextIndex, graph, learnerEvidenceRef.current, paper.pageCount)
+    if (advance) tutorRef.current?.continueFromCheckpointBrief(brief)
+    else tutorRef.current?.updateCheckpointBrief(brief)
   }, [currentId, selectedSourceIds])
 
   /** Merges the background agents' checkpoints 2..N. Returns false when the plan changed mid-merge, so the caller retries. */

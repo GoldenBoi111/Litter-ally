@@ -225,15 +225,28 @@ export class HybridTutor {
     this.languageGuide = guide
   }
 
+  setCheckpointBrief(brief: CheckpointBrief) {
+    if (this.closed || this.paused) return
+    if (this.brief?.checkpoint.title !== brief.checkpoint.title) {
+      this.diagramAttempt += 1
+      this.requestedDiagrams.clear()
+    }
+    this.brief = brief
+  }
+
   updateCheckpointBrief(brief: CheckpointBrief) {
     if (!this.closed && !this.paused) {
-      if (this.brief?.checkpoint.title !== brief.checkpoint.title) {
-        this.diagramAttempt += 1
-        this.requestedDiagrams.clear()
-      }
-      this.brief = brief
+      this.setCheckpointBrief(brief)
       this.input.push({ type: 'message', role: 'user', content: `Updated learner context for the current checkpoint:\n${formatCheckpointBrief(brief)}` })
     }
+  }
+
+  continueFromCheckpointBrief(brief: CheckpointBrief) {
+    if (this.closed || this.paused) return
+    this.setCheckpointBrief(brief)
+    this.input.push({ type: 'message', role: 'user', content: `The next checkpoint is ready. Continue teaching it now:\n${formatCheckpointBrief(brief)}` })
+    if (this.isBusy()) this.pendingResponse = true
+    else void this.respond()
   }
 
   askAboutSelection(imageUrl?: string) {
