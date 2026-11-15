@@ -31,6 +31,7 @@ type InputItem = { type: 'message'; role: 'user' | 'assistant'; content: string 
   { type: 'function_call_output'; call_id: string; output: string } |
   { type: 'reasoning'; [key: string]: unknown }
 
+const BEAT_TRANSITION_PAUSE_MS = 1000
 const REPEAT_STOP_WORDS = new Set('a an the and or of to in on at for from is are was were this that it its as by into with takes produces called'.split(' '))
 
 function repeatsRecentTutorBeat(speech: string, transcripts: Array<{ role: 'Tutor' | 'You'; text: string }>) {
@@ -773,7 +774,7 @@ export class HybridTutor {
   }
 
   private async queueTeachingBeat(beat: TeachingBeat, turn: number) {
-    if (this.queuedTeachingBeats >= 2) await this.speechQueue
+    if (this.queuedTeachingBeats >= 1) await this.speechQueue
     if (turn !== this.turnId || this.closed || this.paused) return
     this.queuedTeachingBeats += 1
     const run = async () => {
@@ -802,7 +803,7 @@ export class HybridTutor {
       if (turn !== this.turnId || this.closed || this.paused) return
       if (this.currentBeat?.id === beat.beatId && this.currentBeat.spokenComplete && this.currentBeat.drawingComplete) this.completedBeatIds.add(beat.beatId)
       this.lastBeatEndedAt = performance.now()
-      if (beat.pauseMs) await new Promise(resolve => window.setTimeout(resolve, beat.pauseMs))
+      await new Promise(resolve => window.setTimeout(resolve, Math.max(beat.pauseMs, BEAT_TRANSITION_PAUSE_MS)))
       if (this.currentBeat?.id === beat.beatId) this.currentBeat = null
     }
     this.speechQueue = this.speechQueue.catch(() => undefined).then(run).catch(error => {
