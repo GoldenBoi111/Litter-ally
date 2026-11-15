@@ -753,8 +753,19 @@ export function getTeachingExecutionState(editor: Editor, lessonId: string, beat
 export function getWhiteboardContext(editor: Editor, lessonId: string, checkpointIndex: number) {
   const shapes = editor.getCurrentPageShapes()
   const own = shapes.filter(shape => shape.meta?.owner === 'agent' && shape.meta?.lessonId === lessonId && shape.meta?.checkpointId === String(checkpointIndex) && !shape.meta?.diagramId)
+  const existingTutor = shapes.filter(shape => shape.meta?.owner === 'agent' && shape.meta?.lessonId === lessonId).slice(-48).flatMap(shape => {
+    const bounds = editor.getShapePageBounds(shape)
+    return bounds ? [{ checkpoint: shape.meta?.checkpointId, beatId: shape.meta?.beatId, actionId: shape.meta?.actionId, type: shape.type,
+      text: (editor.getShapeUtil(shape).getText(shape as any) || '').slice(0, 80), x: Math.round(bounds.x), y: Math.round(bounds.y),
+      w: Math.round(bounds.w), h: Math.round(bounds.h), state: shape.meta?.actionState }] : []
+  })
+  const learner = shapes.filter(shape => !shape.meta?.owner && ['draw', 'text', 'arrow', 'highlight'].includes(shape.type)).slice(-24).flatMap(shape => {
+    const bounds = editor.getShapePageBounds(shape)
+    return bounds ? [{ type: shape.type, text: (editor.getShapeUtil(shape).getText(shape as any) || '').slice(0, 80),
+      x: Math.round(bounds.x), y: Math.round(bounds.y), w: Math.round(bounds.w), h: Math.round(bounds.h) }] : []
+  })
   const latest = [...own].reverse().find(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number')
-  if (!latest) return 'No tutor marks yet. Start with placement new-section.'
+  if (!latest) return JSON.stringify({ area: 'Whole board; global coordinates', tutor: [], existingTutor, learner })
   const origin = { x: latest.meta.originX as number, y: latest.meta.originY as number }
   const inArea = (shape: (typeof shapes)[number]) => {
     const bounds = editor.getShapePageBounds(shape)
@@ -773,7 +784,7 @@ export function getWhiteboardContext(editor: Editor, lessonId: string, checkpoin
     }
   }
   const tutor = own.filter(shape => shape.meta?.originX === origin.x && shape.meta?.originY === origin.y && inArea(shape)).slice(-32).map(mark)
-  const learner = shapes.filter(shape => !shape.meta?.owner && ['draw', 'text', 'arrow', 'highlight'].includes(shape.type) && inArea(shape)).slice(-8).map(mark)
+  const currentLearner = learner.filter(item => item.x < origin.x + DRAWING_AREA.w && item.x + item.w > origin.x && item.y < origin.y + DRAWING_AREA.h && item.y + item.h > origin.y)
   const seen = new Set([`${origin.x},${origin.y}`])
   const nearby = own.filter(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number').reverse().flatMap(shape => {
     const key = `${shape.meta?.originX},${shape.meta?.originY}`
@@ -782,7 +793,7 @@ export function getWhiteboardContext(editor: Editor, lessonId: string, checkpoin
     return [{ anchorBeatId: shape.meta?.beatId, dx: (shape.meta?.originX as number) - origin.x, dy: (shape.meta?.originY as number) - origin.y,
       labels: own.filter(item => item.meta?.originX === shape.meta?.originX && item.meta?.originY === shape.meta?.originY && item.type === 'text').slice(0, 3).map(item => (editor.getShapeUtil(item).getText(item as any) || '').slice(0, 60)) }]
   }).slice(0, 3)
-  return JSON.stringify({ area: 'Latest tutor section; local coordinates 0..1200 x 0..700', tutor, learner, nearby })
+  return JSON.stringify({ area: 'Latest tutor section; local coordinates 0..1200 x 0..700', tutor, existingTutor, learner: currentLearner, otherLearnerMarks: learner, nearby })
 }
 
 function selectionTarget(editor: Editor) {
