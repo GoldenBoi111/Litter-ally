@@ -51,3 +51,11 @@ test('XLSX worksheet names follow workbook relationship order, not sheet filenam
     ['A1=raw', 'Raw Data'],
   ])
 })
+
+test('DOCX extracts paragraph text in order and preserves spaces across runs', () => {
+  const source = extractOfficeSource(zip({
+    'word/document.xml': '<w:document><w:body><w:p><w:r><w:t xml:space="preserve">Attention </w:t></w:r><w:r><w:t>uses &amp; improves context.</w:t></w:r></w:p><w:p><w:r><w:t>Second paragraph.</w:t></w:r></w:p></w:body></w:document>',
+  }), 'notes.docx')
+  assert.equal(source.sourceKind, 'text')
+  assert.equal(source.sourceSegments[0].text, 'Attention uses & improves context.\nSecond paragraph.')
+})
