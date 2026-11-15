@@ -1,4 +1,4 @@
-import { AssetRecordType, createShapeId, type Editor } from 'tldraw'
+import { AssetRecordType, createShapeId, toRichText, type Editor } from 'tldraw'
 
 function dataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
@@ -9,7 +9,7 @@ function dataUrl(blob: Blob) {
   })
 }
 
-export async function placeSourceImage(editor: Editor, image: Blob, sourceId: string, sourceTitle: string, checkpointIndex: number, signal: AbortSignal, frameId = 'image') {
+export async function placeSourceImage(editor: Editor, image: Blob, sourceId: string, sourceTitle: string, checkpointIndex: number, signal: AbortSignal, frameId = 'image', xOffset = 0) {
   if (signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
   const shapeId = createShapeId(`source-${sourceId}-${frameId}`)
   const existing = editor.getShape(shapeId)
@@ -39,7 +39,7 @@ export async function placeSourceImage(editor: Editor, image: Blob, sourceId: st
       }])
     }
     editor.createShape({
-      id: shapeId, type: 'image', x: checkpointIndex * 2400, y: 220,
+      id: shapeId, type: 'image', x: checkpointIndex * 2400 + xOffset, y: 220,
       meta: { owner: 'source', sourceId, checkpointId: String(checkpointIndex) },
       props: { assetId, w: bitmap.width, h: bitmap.height, altText: sourceTitle },
     })
@@ -54,4 +54,17 @@ export async function placeSourceImage(editor: Editor, image: Blob, sourceId: st
   } finally {
     bitmap.close()
   }
+}
+
+export async function placeOutsideImage(editor: Editor, image: Blob, info: { id: string; title: string; sourceUrl: string; credit: string; license: string; licenseUrl: string }, checkpointIndex: number, signal: AbortSignal) {
+  const sourceId = `commons-${info.id}`
+  const result = await placeSourceImage(editor, image, sourceId, info.title, checkpointIndex, signal, 'image', 1200)
+  const imageShape = editor.getShape(createShapeId(`source-${sourceId}-image`))
+  const creditId = createShapeId(`source-${sourceId}-credit`)
+  if (imageShape?.type === 'image' && !editor.getShape(creditId)) editor.createShape({
+    id: creditId, type: 'text', x: imageShape.x, y: imageShape.y + imageShape.props.h + 16,
+    meta: { owner: 'source', sourceId, checkpointId: String(checkpointIndex), sourceUrl: info.sourceUrl },
+    props: { richText: toRichText(`${info.title} · ${info.credit} · ${info.license}\n${info.sourceUrl}${info.licenseUrl ? `\n${info.licenseUrl}` : ''}`), color: 'grey', size: 's', font: 'sans', autoSize: true },
+  })
+  return { message: `${result.message} Credit: ${info.credit}; license: ${info.license}; source: ${info.sourceUrl}` }
 }
