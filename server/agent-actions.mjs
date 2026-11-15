@@ -16,13 +16,27 @@ const widgetActionSchema = {
     title: { type: 'string', minLength: 1, maxLength: 80 },
     labels: { type: 'array', maxItems: 12, items: shortText },
     series: { type: 'array', maxItems: 4, items: { type: 'object', additionalProperties: false, required: ['name', 'values'], properties: { name: shortText, values: { type: 'array', maxItems: 12, items: { type: 'number' } } } } },
-    rows: { type: 'array', maxItems: 10, items: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 120 } } },
+    rows: { type: 'array', description: 'For a table, use one cell per column label in every row (for example ["California", "Sacramento"] for State and Capital city); do not put pipe-separated cells into one string. For a timeline, use [when, what] pairs.', maxItems: 10, items: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 120 } } },
     unit: { type: 'string', maxLength: 12 },
   },
 }
 const beatPointSchema = {
   type: 'object', additionalProperties: false, required: ['x', 'y'],
   properties: { x: { type: 'number', minimum: 0, maximum: 1200 }, y: { type: 'number', minimum: 0, maximum: 700 } },
+}
+
+// A connector that always says what travels along it: the label is required, so no arrow is left for the learner to guess.
+const arrowActionSchema = {
+  type: 'object', additionalProperties: false,
+  required: ['_type', 'id', 'atMs', 'from', 'to', 'label', 'color', 'bend', 'both'],
+  properties: {
+    _type: { type: 'string', const: 'arrow' }, id: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,47}$' }, atMs: { type: 'integer', minimum: 0, maximum: 12000 },
+    from: beatPointSchema, to: beatPointSchema,
+    label: { type: 'string', minLength: 1, maxLength: 48, description: 'What moves along this arrow, in the learner\'s words: "GET /users request", "200 OK + JSON body", "calls", "returns a token".' },
+    color: { type: 'string', enum: colors },
+    bend: { type: 'number', minimum: -260, maximum: 260, description: 'Curve of the arrow; 0 is straight. Bend a return path so it does not sit on top of the outgoing one.' },
+    both: { type: 'boolean', description: 'True for a two-way relationship. For a request and its response, prefer two labelled arrows instead.' },
+  },
 }
 
 export const diagramPlanSchema = {
@@ -85,7 +99,7 @@ export const teachingBeatSchema = {
     placement: { type: 'string', enum: ['new-section', 'continue', 'revisit'] },
     anchorBeatId: { type: 'string', maxLength: 48 },
     actions: {
-      type: 'array', minItems: 1, maxItems: 12,
+      type: 'array', minItems: 1, maxItems: 16,
       items: {
         anyOf: [
           {
@@ -115,6 +129,7 @@ export const teachingBeatSchema = {
             required: ['_type', 'id', 'atMs', 'targetId', 'dx', 'dy'],
             properties: { _type: { type: 'string', const: 'move' }, id: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,47}$' }, atMs: { type: 'integer', minimum: 0, maximum: 12000 }, targetId: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,47}$' }, dx: { type: 'number', minimum: -1200, maximum: 1200 }, dy: { type: 'number', minimum: -700, maximum: 700 } },
           },
+          arrowActionSchema,
           widgetActionSchema,
         ],
       },
@@ -221,7 +236,7 @@ export function validateTeachingBeat(value) {
   if (!value || typeof value !== 'object' || !validBeatId(value.beatId) || typeof value.context !== 'string' || !value.context.trim() || value.context.length > 300 ||
       typeof value.speech !== 'string' || !value.speech.trim() || value.speech.length > 600 || !Number.isInteger(value.pauseMs) || value.pauseMs < 0 || value.pauseMs > 8000 ||
       typeof value.waitForLearner !== 'boolean' || !['new-section', 'continue', 'revisit'].includes(value.placement) || typeof value.anchorBeatId !== 'string' || value.anchorBeatId.length > 48 ||
-      !Array.isArray(value.actions) || value.actions.length < 1 || value.actions.length > 12) {
+      !Array.isArray(value.actions) || value.actions.length < 1 || value.actions.length > 16) {
     throw new Error('OpenAI returned an invalid teaching beat.')
   }
 
@@ -239,6 +254,13 @@ export function validateTeachingBeat(value) {
     } else if (action._type === 'text') {
       if (!finiteNumber(action.x) || !finiteNumber(action.y) || action.x < 0 || action.x > 1200 || action.y < 0 || action.y > 700 || typeof action.text !== 'string' || !action.text.trim() || action.text.length > 180 ||
           !colors.includes(action.color) || !textSizes.includes(action.size)) throw new Error('The teaching beat contains invalid editable text.')
+    } else if (action._type === 'arrow') {
+      const point = value => value && finiteNumber(value.x) && finiteNumber(value.y) && value.x >= 0 && value.x <= 1200 && value.y >= 0 && value.y <= 700
+      if (!point(action.from) || !point(action.to) || (action.from.x === action.to.x && action.from.y === action.to.y) ||
+          typeof action.label !== 'string' || !action.label.trim() || action.label.length > 48 ||
+          !colors.includes(action.color) || !finiteNumber(action.bend) || Math.abs(action.bend) > 260 || typeof action.both !== 'boolean') {
+        throw new Error('The teaching beat contains an invalid labelled arrow.')
+      }
     } else if (action._type === 'remove') {
       if (!validBeatId(action.targetId)) throw new Error('The teaching beat contains an invalid revision target.')
     } else if (action._type === 'move') {
