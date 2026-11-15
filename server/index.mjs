@@ -391,6 +391,14 @@ async function extractSparseWebPageWithExa(sourceUrl) {
   }
 }
 
+function mayFallbackToExa(error) {
+  return error instanceof Error && (
+    /The source returned HTTP (?:403|408|429|5\d\d)\./.test(error.message) ||
+    error.message.includes('The source took too long to respond.') ||
+    ['ECONNRESET', 'ETIMEDOUT'].includes(error.code)
+  )
+}
+
 async function extractPdf(buffer, fallbackTitle) {
   if (!buffer.subarray(0, 5).equals(Buffer.from('%PDF-'))) throw new Error('This file does not appear to be a PDF.')
   const task = pdfjs.getDocument({ data: new Uint8Array(buffer), useSystemFonts: true, verbosity: 0 })
@@ -803,7 +811,15 @@ app.post('/api/ingest/web', async (req, res) => {
       const result = await extractPdf(fetched.buffer, basename(new URL(fetched.finalUrl).pathname).replace(/\.pdf$/i, '') || 'Imported PDF')
       return res.json({ ...result, sourceUrl: source.sourceUrl, pdfUrl: fetched.finalUrl, fileName: '', pdfBase64: fetched.buffer.toString('base64') })
     }
-    const fetched = await fetchRemoteHtml(source.sourceUrl)
+    let fetched
+    try {
+      fetched = await fetchRemoteHtml(source.sourceUrl)
+    } catch (error) {
+      if (!mayFallbackToExa(error)) throw error
+      const exaResult = await extractSparseWebPageWithExa(source.sourceUrl).catch(() => null)
+      if (exaResult) return res.json(exaResult)
+      throw error
+    }
     let result
     try { result = extractWebPage(fetched.buffer, fetched.finalUrl) } catch (error) {
       if (!(error instanceof Error) || !error.message.includes('no readable text')) throw error
