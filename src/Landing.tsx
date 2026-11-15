@@ -11,11 +11,10 @@ import './landing.css'
 
 gsap.registerPlugin(ScrollTrigger)
 
-/** Idea cards on the board, in world units (the scene is drawn on a 640x520 desk). `from` is what each idea lifts out of:
-    a highlight in the paper or the lecture video on the desk, so the board visibly pulls from more than one kind of source. */
+/** Idea cards on the board, in world units (the scene is drawn on a 640x520 desk). Each idea lifts out of a passage in the paper. */
 const IDEAS = [
   { id: 'roots', from: '.ls-doc mark', x: -40, y: 10, w: 200, label: 'Fungal threads link neighbouring roots' },
-  { id: 'feed', from: '.ls-video', x: 470, y: 40, w: 196, label: 'Older trees feed shaded seedlings' },
+  { id: 'feed', from: '.ls-doc p:nth-of-type(5) mark', x: 470, y: 40, w: 196, label: 'Older trees feed shaded seedlings' },
   { id: 'trade', from: '.ls-doc p:nth-of-type(4) mark', x: 440, y: 380, w: 200, label: 'Sugar and nitrogen travel the links' },
 ] as const
 const HUB = { x: 190, y: 190, w: 220 }
@@ -38,7 +37,7 @@ const STRINGS = [
 const CHAPTERS = [
   {
     step: 'Add anything', title: 'Bring anything you learn from',
-    body: 'Lecture videos, slide decks, PDFs, recordings, spreadsheets, screenshots, notes, even code. Video and audio get transcribed, images get read, and everything is indexed so each answer stays grounded and cited.',
+    body: 'Slide decks, PDFs, recordings, spreadsheets, screenshots, notes, even code. Audio gets transcribed, images get read, and everything is indexed so each answer stays grounded and cited.',
   },
   {
     step: 'Agents team up', title: 'Agents that build on each other',
@@ -309,11 +308,6 @@ export function Landing({ children, onSignIn }: LandingProps) {
               <div className="ls-world">
                 <div className="ls-mat" />
                 <div className="ls-pencil"><i /></div>
-                <div className="ls-media ls-video">
-                  <span className="ls-video-play" />
-                  <span className="ls-video-bar"><i /></span>
-                  <small>Lecture 3 · 18:42</small>
-                </div>
                 <div className="ls-sheet ls-sheet-3" />
                 <div className="ls-sheet ls-sheet-2" />
                 <article className="ls-doc">
