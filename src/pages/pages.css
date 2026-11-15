@@ -199,9 +199,8 @@
 /* Keep lesson controls fixed at the canvas top; the canvas toolbar stays at the bottom. */
 .lesson-bar {
   position: absolute; left: 16px; top: 16px; z-index: 400;
-  display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px; max-width: calc(100% - 32px);
 }
-@media (max-width: 1100px) { .lesson-bar { flex-wrap: wrap; } }
 
 .lesson-text-chat {
   position: absolute; left: 0; top: calc(100% + 12px); z-index: 401;

@@ -513,7 +513,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
   const startedAt = performance.now()
   const completedIds: TLShapeId[] = []
   let cursorPoint: AgentCursorPoint | null = null
-  let previousTextEnd: AgentCursorPoint | null = null
+  let previousTextId: TLShapeId | null = null
   const renderedTextEnd = (shapeId: TLShapeId, fallback: AgentCursorPoint) => {
     const text = editor.getContainer().querySelector<HTMLElement>(`[data-shape-id="${shapeId}"] .tl-rich-text`)
     if (text?.textContent) {
@@ -603,7 +603,8 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
 
     const id = createShapeId(`lesson-${context.lessonId}-${context.checkpointIndex}-${beat.beatId}-${action.id}`)
     const existing = editor.getShape(id)
-    if (action._type === 'text') previousTextEnd = renderedTextEnd(id, { x: origin.x + action.x, y: origin.y + action.y })
+    if (action._type === 'text') previousTextId = id
+    else if (action._type !== 'arrow') previousTextId = null
     if (existing?.meta?.actionState === 'complete') { completedIds.push(id); continue }
 
     if (action._type === 'stroke') {
@@ -644,8 +645,14 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       const steps = 12
       let progress = Math.max(0, Math.min(steps, Number(existing?.meta?.actionProgress) || 0))
       const modelTail = { x: origin.x + action.from.x, y: origin.y + action.from.y }
-      const tail = previousTextEnd || modelTail
-      const reach = { x: action.to.x - action.from.x, y: action.to.y - action.from.y }
+      const target = { x: origin.x + action.to.x, y: origin.y + action.to.y }
+      const previousText = previousTextId && editor.getShape(previousTextId)
+      const textBounds = previousText && editor.getShapePageBounds(previousText)
+      const tail = textBounds && modelTail.x >= textBounds.x - 48 && modelTail.x <= textBounds.x + textBounds.w + 48 &&
+        modelTail.y >= textBounds.y - 48 && modelTail.y <= textBounds.y + textBounds.h + 48
+        ? renderedTextEnd(previousTextId!, modelTail) : modelTail
+      previousTextId = null
+      const reach = { x: target.x - tail.x, y: target.y - tail.y }
       // Never a zero-length shaft: the first frame already has a visible length, and the direction is kept.
       const at = (fraction: number) => { const grown = Math.max(fraction, 1 / steps); return { x: reach.x * grown, y: reach.y * grown } }
       await guideCursor(context.onCursor, cursorPoint, tail, context.signal)
@@ -717,7 +724,6 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
           editor.updateShape({ id, type: 'text', meta: metaFor(action, progress === action.text.length ? 'complete' : 'interrupted', progress), props: { richText: toRichText(action.text.slice(0, progress)), size, scale: 3, font: 'draw', autoSize: true } } as any)
           await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
           cursorPoint = textCursor()
-          previousTextEnd = cursorPoint
           context.onCursor?.(cursorPoint)
           await wait(frameMs, context.signal)
         }

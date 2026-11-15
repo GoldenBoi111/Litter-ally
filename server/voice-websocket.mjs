@@ -71,7 +71,7 @@ export function attachVoiceWebSocket(server, { authenticate, voiceUrl }) {
         const audio = Buffer.concat(parts)
         if (audio.length < 6_400 || audio.length > MAX_AUDIO_BYTES) { send({ type: 'error', turn: endedTurn, error: 'Speech must be between 0.1 and 30 seconds.' }); return }
         void fetch(`${voiceUrl}/source-transcribe`, {
-          method: 'POST', headers: { 'content-type': 'application/octet-stream', 'x-voice-prompt': String(message.prompt || '').slice(0, 2_000) },
+          method: 'POST', headers: { 'content-type': 'application/octet-stream', 'x-voice-prompt': encodeURIComponent(String(message.prompt || '')).slice(0, 2_000) },
           body: audio, signal: AbortSignal.timeout(120_000),
         }).then(async response => {
           const result = await response.json().catch(() => ({}))

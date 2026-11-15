@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { transformWithOxc } from 'vite'
 import { compressLegacySegments, drawShapeProps } from '@tldraw/tlschema'
 
+
 const source = readFileSync(new URL('../src/lessonAgent.ts', import.meta.url), 'utf8')
 let compiled = (await transformWithOxc(source, 'src/lessonAgent.ts')).code
 const storageMock = `data:text/javascript,${encodeURIComponent("export const knowledgeNodeId = value => value; export const readApiJson = value => value")}`
@@ -30,6 +31,7 @@ function fakeEditor(initial = []) {
     shapes,
     getCurrentPageShapes: () => [...shapes.values()],
     getShape: id => shapes.get(id),
+    getContainer: () => ({ querySelector: () => null }),
     createShape: shape => shapes.set(shape.id, { ...shape }),
     updateShape: update => {
       const current = shapes.get(update.id)
@@ -270,4 +272,25 @@ test('a labelled arrow grows from tail to head and only then carries its words',
   const growth = seen.filter(update => update.props?.end).map(update => update.props.end.x)
   assert.ok(growth.length > 4 && growth.every((x, index) => index === 0 || x <= growth[index - 1]), 'the shaft grows under the pen')
   assert.ok(seen.filter(update => update.props?.richText === 'GET /users request').length === 1, 'the label is written once, at the end')
+})
+
+test('arrows attach only to the nearby preceding label and keep their planned targets', async () => {
+  const origin = { x: 1100, y: 220 }
+  const label = { id: 'shape:lesson-paper-0-arrow_layout-label', type: 'text', x: 1120, y: 240, bounds: { x: 1120, y: 240, w: 100, h: 40 }, props: { richText: 'input' }, meta: { owner: 'agent', lessonId: 'paper', checkpointId: '0', beatId: 'arrow_layout', actionState: 'complete', originX: origin.x, originY: origin.y } }
+  const editor = fakeEditor([label])
+  await applyTeachingBeat(editor, {
+    beatId: 'arrow_layout', context: 'Connect the labels.', speech: 'Input flows forward, then the output returns.',
+    pauseMs: 0, waitForLearner: false, placement: 'continue', anchorBeatId: '',
+    actions: [
+      { _type: 'text', id: 'label', atMs: 0, x: 20, y: 20, text: 'input', color: 'black', size: 'l' },
+      { _type: 'arrow', id: 'near', atMs: 0, from: { x: 20, y: 20 }, to: { x: 500, y: 20 }, label: 'flows', color: 'blue', bend: 0, both: false },
+      { _type: 'arrow', id: 'far', atMs: 0, from: { x: 800, y: 400 }, to: { x: 500, y: 400 }, label: 'returns', color: 'blue', bend: 0, both: false },
+    ],
+  }, { lessonId: 'paper', checkpointIndex: 0, signal: new AbortController().signal })
+  const near = editor.getShape('shape:lesson-paper-0-arrow_layout-near')
+  const far = editor.getShape('shape:lesson-paper-0-arrow_layout-far')
+  assert.equal(near.x, label.bounds.x + label.bounds.w)
+  assert.equal(near.x + near.props.end.x, origin.x + 500)
+  assert.equal(far.x, origin.x + 800)
+  assert.equal(far.x + far.props.end.x, origin.x + 500)
 })

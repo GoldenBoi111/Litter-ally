@@ -8,7 +8,7 @@ import os
 import struct
 import time
 from collections import deque
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 import av
 import numpy as np
@@ -302,7 +302,7 @@ async def diagnostic_transcribe(request):
     audio = np.frombuffer(await request.read(), dtype="<f4")
     if audio.size < 1_600 or audio.size > 16_000 * 90 or not np.isfinite(audio).all():
         raise web.HTTPBadRequest(text="Invalid Float32 speech audio.")
-    prompt = request.headers.get("X-Voice-Prompt", "")[:2_000]
+    prompt = unquote(request.headers.get("X-Voice-Prompt", "")[:2_000])
     async with asr_semaphore:
         return web.json_response(await asyncio.to_thread(transcribe, audio, prompt))
 
@@ -314,7 +314,7 @@ async def source_transcribe(request):
     if audio.size < 1_600 or audio.size > MAX_SEGMENT_SAMPLES or not np.isfinite(audio).all():
         raise web.HTTPBadRequest(text="Invalid audio chunk.")
     async with asr_semaphore:
-        result = await asyncio.to_thread(transcribe, audio, request.headers.get("X-Voice-Prompt", "")[:2_000])
+        result = await asyncio.to_thread(transcribe, audio, unquote(request.headers.get("X-Voice-Prompt", "")[:2_000]))
     return web.json_response(result)
 
 
