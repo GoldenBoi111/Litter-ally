@@ -94,7 +94,7 @@ function IntakePanel({ busy, progress, error, onFiles, onUrl, onTopic }: IntakeP
       </Tabs>
       {mode === 'file' ? (
         <div className={`drop-zone ${dragging ? 'dragging' : ''}`} onDragEnter={event => { event.preventDefault(); setDragging(true) }} onDragOver={event => event.preventDefault()} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false) }} onDrop={event => { event.preventDefault(); setDragging(false); onFiles(Array.from(event.dataTransfer.files)) }}>
-          <input ref={inputRef} className="file-input" type="file" accept=".pdf,.txt,.md,.markdown,.csv,.pptx,.xlsx,.ts,.tsx,.js,.jsx,.mjs,.py,.java,.go,.rs,.c,.h,.cpp,.cs,.rb,.php,.sh,.sql,.json,.yaml,.yml,.toml,.xml,image/*,audio/*,video/*" multiple aria-label="Choose learning material files" onChange={event => { if (event.currentTarget.files) onFiles(Array.from(event.currentTarget.files)); event.currentTarget.value = '' }} />
+          <input ref={inputRef} className="file-input" type="file" accept=".pdf,.txt,.md,.markdown,.csv,.docx,.pptx,.xlsx,.ts,.tsx,.js,.jsx,.mjs,.py,.java,.go,.rs,.c,.h,.cpp,.cs,.rb,.php,.sh,.sql,.json,.yaml,.yml,.toml,.xml,image/*,audio/*,video/*" multiple aria-label="Choose learning material files" onChange={event => { if (event.currentTarget.files) onFiles(Array.from(event.currentTarget.files)); event.currentTarget.value = '' }} />
           <div className="upload-symbol">+</div>
           <b>{dragging ? 'Drop files to import' : 'Drop learning material here'}</b>
           <span>or <button type="button" className="browse-link" onClick={() => inputRef.current?.click()}>choose files</button></span>
@@ -487,7 +487,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
             imported++
             continue
           }
-          if (/\.(pptx|xlsx)$/i.test(file.name)) {
+          if (/\.(docx|pptx|xlsx)$/i.test(file.name)) {
             const form = new FormData()
             form.append('file', file)
             const extracted = await readApiJson<ApiImportResult>(fetch('/api/ingest/office', { method: 'POST', body: form }), 'The import service')
@@ -496,7 +496,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
             continue
           }
           if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-            failures.push(`${file.name}: this format is not supported yet. Choose PDF, text, Markdown, CSV, PowerPoint, Excel, an image, audio, video, or a code file.`)
+            failures.push(`${file.name}: this format is not supported yet. Choose PDF, text, Markdown, CSV, Word, PowerPoint, Excel, an image, audio, video, or a code file.`)
             continue
           }
           const form = new FormData()

@@ -683,7 +683,7 @@ app.post('/api/ingest', upload.single('file'), async (req, res) => {
 
 app.post('/api/ingest/office', upload.single('file'), (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'Choose a PowerPoint or Excel file.' })
+    if (!req.file) return res.status(400).json({ error: 'Choose a Word, PowerPoint, or Excel file.' })
     res.json(extractOfficeSource(req.file.buffer, req.file.originalname))
   } catch (error) {
     const message = error instanceof Error ? error.message : 'The office file could not be imported.'
