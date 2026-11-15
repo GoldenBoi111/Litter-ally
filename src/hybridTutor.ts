@@ -10,11 +10,13 @@ export type TutorCallbacks = {
   presentTeachingBeat: (beat: TeachingBeat) => Promise<TeachingExecutionState>
   drawDiagram: (diagramIndex: number, request?: string) => Promise<string>
   showSourcePage: (pageNumber: number) => Promise<{ message: string; imageUrl?: string; pageText?: string }>
+  placeOutsideImage: (image: Blob, info: { id: string; title: string; sourceUrl: string; credit: string; license: string; licenseUrl: string }) => Promise<string>
   readSourcePage: (pageNumber: number) => string
   moveCheckpoint: (direction: 'next' | 'previous') => Promise<string>
   /** Erases the agent's board marks for a concept and resets it to its start; returns that concept's brief. */
   restartConcept: (scope: 'current' | 'previous') => Promise<string>
   getSelection: () => SelectionContext | null
+  getSelectionImage: () => Promise<string | undefined>
   getWhiteboardContext: () => string
   getTeachingState: (beatId: string) => TeachingExecutionState
   onStatus: (status: TutorStatus, detail?: string) => void
@@ -40,6 +42,7 @@ export class HybridTutor {
   private readonly sources = new Set<AudioBufferSourceNode>()
   private readonly ttsControllers = new Set<AbortController>()
   private input: InputItem[] = []
+  private selectionPending = false
   private title = ''
   private brief: CheckpointBrief | null = null
   private turnId = 0
@@ -68,10 +71,12 @@ export class HybridTutor {
   private interruptedForInput = false
   private lastBeatEndedAt = 0
   private automaticBeatStreak = 0
+  private diagramTurn = -1
+  private diagramAttempt = 0
+  private visualRequest = ''
   private readonly seenBeatIds = new Set<string>()
   private readonly streaming: boolean
   private readonly bargeIn: boolean
-  private readonly rtcUrl: string
   private readonly iceServers: RTCIceServer[]
   /** True when the local WebRTC voice host is unreachable and we fall back to the browser's own speech APIs. */
   private browserVoice = false
@@ -80,10 +85,9 @@ export class HybridTutor {
   /** Set when the learner cut the tutor off to ask something: answer, then pick the lesson back up. */
   private resumeAfterAnswer = false
 
-  constructor(private callbacks: TutorCallbacks, private preparedAudioContext?: AudioContext, options: { streaming?: boolean; bargeIn?: boolean; rtcUrl?: string; iceServers?: RTCIceServer[] } = {}) {
+  constructor(private callbacks: TutorCallbacks, private preparedAudioContext?: AudioContext, options: { streaming?: boolean; bargeIn?: boolean; iceServers?: RTCIceServer[] } = {}) {
     this.streaming = options.streaming !== false
     this.bargeIn = options.bargeIn !== false
-    this.rtcUrl = options.rtcUrl || 'http://127.0.0.1:8190'
     this.iceServers = options.iceServers || []
   }
 
@@ -97,6 +101,7 @@ export class HybridTutor {
     this.title = paperTitle
     this.brief = brief
     this.input = []
+    this.selectionPending = false
     this.transcripts = []
     this.seenBeatIds.clear()
     this.currentBeat = null
@@ -104,6 +109,8 @@ export class HybridTutor {
     this.queuedTeachingBeats = 0
     this.lastBeatEndedAt = 0
     this.automaticBeatStreak = 0
+    this.diagramTurn = -1
+    this.visualRequest = ''
     this.callbacks.onStatus('connecting', 'Loading local speech detection and requesting microphone access…')
     this.audioContext = this.preparedAudioContext || new AudioContext()
     this.speechOutput = createSpeechOutput(this.audioContext)
@@ -172,6 +179,8 @@ export class HybridTutor {
       this.interruptedForInput = false
       this.appendInterruptedState()
       const text = message.trim()
+      this.selectionPending = true
+      this.visualRequest = text
       this.transcripts = [...this.transcripts, { role: 'You' as const, text }].slice(-8)
       this.callbacks.onTranscript(this.transcripts)
       this.input.push({ type: 'message', role: 'user', content: text })
@@ -188,6 +197,10 @@ export class HybridTutor {
 
   updateCheckpointBrief(brief: CheckpointBrief) {
     if (!this.closed && !this.paused) {
+      if (this.brief?.checkpoint.title !== brief.checkpoint.title) {
+        this.diagramTurn = -1
+        this.visualRequest = ''
+      }
       this.brief = brief
       this.input.push({ type: 'message', role: 'user', content: `Updated learner context for the current checkpoint:\n${formatCheckpointBrief(brief)}` })
     }
@@ -196,6 +209,8 @@ export class HybridTutor {
   askAboutSelection(imageUrl?: string) {
     if (this.closed) return
     this.interrupt()
+    this.selectionPending = true
+    this.visualRequest = 'Explain how the selected canvas marks connect to this lesson.'
     this.interruptedForInput = false
     this.appendInterruptedState()
     this.input.push({
@@ -403,14 +418,12 @@ export class HybridTutor {
       await waitForIce(peer)
       const local = peer.localDescription
       if (!local) throw new Error('WebRTC could not create a local offer.')
-      const offerUrl = new URL(`${this.rtcUrl.replace(/\/$/, '')}/offer`)
-      const offerRequest: RequestInit & { targetAddressSpace?: 'loopback' | 'local' } = {
+      const offerRequest: RequestInit = {
         method: 'POST', signal: AbortSignal.timeout(20_000),
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ sdp: local.sdp, type: local.type }),
       }
-      if (['localhost', '127.0.0.1', '[::1]'].includes(offerUrl.hostname)) offerRequest.targetAddressSpace = 'loopback'
-      const response = await fetch(offerUrl, offerRequest)
+      const response = await fetch('/api/voice/offer', offerRequest)
       const answer = await response.json().catch(() => ({})) as RTCSessionDescriptionInit & { error?: string }
       if (!response.ok || !answer.sdp || !answer.type) throw new Error(answer.error || `Local voice host returned HTTP ${response.status}.`)
       await peer.setRemoteDescription(answer)
@@ -419,7 +432,7 @@ export class HybridTutor {
       peer.close()
       if (this.peer === peer) this.peer = null
       if (this.control === channel) this.control = null
-      if (error instanceof TypeError) throw new Error(`Could not reach the local voice host at ${this.rtcUrl}. Check its URL, CORS origins, and that the service is running.`)
+      if (error instanceof TypeError) throw new Error('Could not reach the app voice service. Check that the voice service is running.')
       throw error
     }
   }
@@ -516,6 +529,9 @@ export class HybridTutor {
     if (turn !== this.turnId || this.closed || this.paused) return
     const text = value.trim()
     if (!text) { this.callbacks.onStatus('listening'); return }
+    this.diagramTurn = -1
+    this.visualRequest = text
+    this.selectionPending = true
     this.interruptedForInput = false
     this.appendInterruptedState()
     this.transcripts = [...this.transcripts, { role: 'You' as const, text }].slice(-8)
@@ -533,6 +549,8 @@ export class HybridTutor {
     this.trimHistory()
     const turn = this.turnId
     const inputCount = this.input.length
+    const includeSelection = this.selectionPending
+    this.selectionPending = false
     const requestInput: InputItem[] = [...this.input, { type: 'message', role: 'user', content: `(Board telemetry, not a new learner turn. Continue the pending lesson or question using this current whiteboard state as data: ${this.callbacks.getWhiteboardContext()})` }]
     this.assistantBusy = true
     this.pendingResponse = false
@@ -551,6 +569,15 @@ export class HybridTutor {
     let pendingTools = 0
     let toolTail = Promise.resolve()
     try {
+      const selection = includeSelection ? this.callbacks.getSelection() : null
+      if (selection) {
+        const imageUrl = await this.callbacks.getSelectionImage().catch(() => undefined)
+        if (controller.signal.aborted || turn !== this.turnId || this.closed) return
+        requestInput.splice(-1, 0, { type: 'message', role: 'user', content: [
+          { type: 'input_text', text: `Board reference for the learner's latest mark or selection: ${JSON.stringify({ ...selection, shapes: selection.shapes.slice(0, 40) })}. The mark points to the content inside it; use the image crop to identify what the learner means.` },
+          ...(imageUrl ? [{ type: 'input_image', image_url: imageUrl }] : []),
+        ] })
+      }
       const response = await fetch('/api/voice/respond', {
         method: 'POST', signal: controller.signal,
         headers: { 'content-type': 'application/json' },
@@ -607,6 +634,7 @@ export class HybridTutor {
       }
       await toolTail
       if (turn !== this.turnId || this.closed) return
+      if (accumulated.trim() && !calls.length && this.diagramTurn !== turn) this.startDiagram(this.visualRequest)
       if (this.responseController === controller) this.responseController = null
       if (this.streaming) {
         if (phraseBuffer.trim()) this.enqueueSpeech(phraseBuffer.trim(), turn)
@@ -792,6 +820,17 @@ export class HybridTutor {
     while (turn === this.turnId && !this.closed && this.sources.size) await new Promise(resolve => window.setTimeout(resolve, 30))
   }
 
+  private startDiagram(request: string, diagramIndex = 0) {
+    this.diagramTurn = this.turnId
+    const turn = this.turnId
+    const attempt = ++this.diagramAttempt
+    void this.callbacks.drawDiagram(diagramIndex, request.slice(0, 600)).then(result => {
+      if (turn === this.turnId && attempt === this.diagramAttempt && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: ${result})` })
+    }).catch(error => {
+      if (turn === this.turnId && attempt === this.diagramAttempt && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: the diagram failed: ${error instanceof Error ? error.message : 'unknown error'}. Continue without it.)` })
+    })
+  }
+
   private async executeTool(name: string, raw: string): Promise<{ output: string; context?: InputItem; continueAutomatically?: boolean }> {
     const args = JSON.parse(raw) as Record<string, unknown>
     let output = 'Unknown tool.'
@@ -800,6 +839,7 @@ export class HybridTutor {
     this.callbacks.onStatus('drawing')
     if (name === 'present_teaching_beat') {
       const beat = readTeachingBeat(args)
+      if (this.diagramTurn !== this.turnId) this.startDiagram(this.visualRequest)
       await this.queueTeachingBeat(beat, this.turnId)
       this.automaticBeatStreak = beat.waitForLearner ? 0 : this.automaticBeatStreak + 1
       continueAutomatically = !beat.waitForLearner && this.automaticBeatStreak < 3
@@ -820,20 +860,31 @@ export class HybridTutor {
       } catch (error) {
         output = `The outside lookup failed (${error instanceof Error ? error.message : 'unknown error'}). Say the material does not define it and give a short plain explanation labeled as general background.`
       }
+    } else if (name === 'find_lesson_image' && typeof args.query === 'string') {
+      this.callbacks.onStatus('connecting', `Finding an illustration for "${args.query}"…`)
+      try {
+        const response = await fetch('/api/background/image', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: args.query }) })
+        await checkApiResponse(response, 'Image search')
+        const { image } = await response.json() as { image: { id: string; title: string; sourceUrl: string; credit: string; license: string; licenseUrl: string; mimeType: string; data: string } | null }
+        if (!image) output = 'No suitable licensed illustration was found. Continue with a drawn visual.'
+        else {
+          const bytes = Uint8Array.from(atob(image.data), char => char.charCodeAt(0))
+          output = await this.callbacks.placeOutsideImage(new Blob([bytes], { type: image.mimeType }), image)
+          context = { type: 'message', role: 'user', content: [{ type: 'input_text', text: `This Wikimedia Commons image is on the canvas. Treat it as outside background, credit ${image.credit} under ${image.license}, and inspect it before describing its details. Source: ${image.sourceUrl}` }, { type: 'input_image', image_url: `data:${image.mimeType};base64,${image.data}` }] }
+        }
+      } catch (error) {
+        output = `Image lookup failed (${error instanceof Error ? error.message : 'unknown error'}). Continue with a drawn visual.`
+      }
     } else if (name === 'read_source_segment' && Number.isInteger(args.pageNumber)) {
       output = this.callbacks.readSourcePage(Number(args.pageNumber))
     } else if (name === 'draw_lesson_diagram' && Number.isInteger(args.diagramIndex)) {
       const request = typeof args.request === 'string' ? args.request.trim().slice(0, 600) : ''
-      // Don't block the voice on diagram planning + drawing: start it and let the tutor keep talking while ink appears.
-      const turn = this.turnId
-      void this.callbacks.drawDiagram(Number(args.diagramIndex), request).then(result => {
-        if (turn === this.turnId && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: ${result})` })
-      }).catch(error => {
-        if (turn === this.turnId && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: the diagram failed: ${error instanceof Error ? error.message : 'unknown error'}. Continue without it.)` })
-      })
-      output = 'The diagram has started drawing on the board and will appear stroke by stroke over the next half minute. Do not wait for it: start explaining right now with present_teaching_beat, walking through the idea in the order it is being drawn, and do not call draw_lesson_diagram again for it.'
+      if (this.diagramTurn !== this.turnId) this.startDiagram(request, Number(args.diagramIndex))
+      output = 'A detailed visual is being drawn in the background. Continue explaining with present_teaching_beat while it appears; do not request the same diagram again.'
     } else if (name === 'restart_concept' && (args.scope === 'current' || args.scope === 'previous')) {
       const brief = await this.callbacks.restartConcept(args.scope)
+      this.diagramTurn = -1
+      this.visualRequest = ''
       // Forget the erased beats so the re-teach draws fresh instead of "resuming" marks that no longer exist.
       this.currentBeat = null
       this.interruptedBeat = null
@@ -843,6 +894,8 @@ export class HybridTutor {
       output = `The board for this concept is cleared and the concept is reset to its start. Re-teach it from its very first point with new beat ids, more simply than before, and do not mention the erased marks.\n\n${brief}`
     } else if (name === 'move_checkpoint' && (args.direction === 'next' || args.direction === 'previous')) {
       output = await this.callbacks.moveCheckpoint(args.direction)
+      this.diagramTurn = -1
+      this.visualRequest = ''
     } else if (name === 'inspect_canvas_selection' && typeof args.question === 'string') {
       const selection = this.callbacks.getSelection()
       output = selection ? JSON.stringify({ question: args.question, ...selection }) : 'Nothing is selected. Ask the learner to select the shape or circle they want explained.'
@@ -869,7 +922,7 @@ export function createSpeechOutput(context: AudioContext): AudioNode {
 const SPEECH_GAIN = 2.5
 
 function browserSpeechAvailable() {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined'
+  return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined' && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
 }
 
 function waitForIce(peer: RTCPeerConnection) {
