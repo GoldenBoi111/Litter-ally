@@ -166,7 +166,7 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
           </span>
           {talking
             ? <span className="talk-copy"><b>Listening…</b> release to send</span>
-            : <span className="talk-copy"><span className="keycap">Space</span><span><b>Hold to talk</b>{status === 'speaking' ? ' · cuts in anytime' : ' · just speak naturally'}</span></span>}
+            : <span className="talk-copy"><span className="keycap">Space</span><span><b>Hold to talk</b>{status === 'speaking' ? ' · cuts in anytime' : ''}</span></span>}
         </button>
       )}
 
