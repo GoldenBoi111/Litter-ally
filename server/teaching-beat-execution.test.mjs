@@ -9,12 +9,14 @@ let compiled = (await transformWithOxc(source, 'src/lessonAgent.ts')).code
 const storageMock = `data:text/javascript,${encodeURIComponent("export const knowledgeNodeId = value => value; export const readApiJson = value => value")}`
 const tldrawMock = `data:text/javascript,${encodeURIComponent("export const createShapeId = value => `shape:${value}`; export const toRichText = value => value")}`
 const schemaMock = `data:text/javascript,${encodeURIComponent("export const compressLegacySegments = value => value")}`
+const widgetsMock = `data:text/javascript,${encodeURIComponent("export const getWidgetSize = (action, w, h) => ({ w, h })")}`
 compiled = compiled
   .replace(/from ["']tldraw["']/, `from ${JSON.stringify(tldrawMock)}`)
   .replace(/from ["']@tldraw\/tlschema["']/, `from ${JSON.stringify(schemaMock)}`)
   .replace(/from ["']\.\.\/server\/agent-actions\.mjs["']/, `from ${JSON.stringify(new URL('./agent-actions.mjs', import.meta.url).href)}`)
   .replace(/from ["']\.\/storage["']/, `from ${JSON.stringify(storageMock)}`)
-const { applyDiagramPlan, applyTeachingBeat, getSelectionContext, getWhiteboardContext } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+  .replace(/from ["']\.\/lessonWidgets["']/, `from ${JSON.stringify(widgetsMock)}`)
+const { applyDiagramPlan, applyTeachingBeat, clearConceptMarks, conceptRegion, getSelectionContext, getWhiteboardContext } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 
 test('installed tldraw schema accepts the native compressed pen segments', () => {
   const segments = compressLegacySegments([{ type: 'free', points: [{ x: 0, y: 0, z: 0.5 }, { x: 20, y: 10, z: 0.5 }] }])
@@ -204,4 +206,55 @@ test('describes the latest drawing area with local positions and learner marks',
   assert.equal(context.learner[0].x, 50)
   assert.deepEqual(context.nearby[0], { anchorBeatId: 'earlier', dx: 0, dy: -140, labels: ['earlier idea'] })
   assert.equal(JSON.stringify(context).includes('private other lesson'), false)
+})
+
+test('a fresh concept starts clear of the work another concept left in its column', async () => {
+  const spilled = { id: 'shape:spilled', type: 'draw', meta: { owner: 'agent', lessonId: 'paper', checkpointId: '0', beatId: 'earlier', originX: 1100, originY: 220 }, bounds: { x: 3400, y: 200, w: 700, h: 400 } }
+  const editor = fakeEditor([spilled])
+  await applyTeachingBeat(editor, { ...beat(2), actions: [beat(2).actions[0]] }, { lessonId: 'paper', checkpointIndex: 1, signal: new AbortController().signal })
+  const fresh = [...editor.shapes.values()].find(shape => shape.meta?.beatId === 'derive_one')
+  assert.ok(fresh.meta.originY > spilled.bounds.y + spilled.bounds.h, 'the new concept moves clear of the finished one')
+  assert.ok(fresh.y > spilled.bounds.y + spilled.bounds.h, 'nothing is drawn over the finished concept')
+})
+
+test('restarting a concept removes every tutor mark it made and keeps the rest of the board', () => {
+  const own = { id: 'shape:own', type: 'draw', meta: { owner: 'agent', lessonId: 'paper', checkpointId: '0' }, bounds: { x: 1100, y: 220, w: 100, h: 100 } }
+  const material = { id: 'shape:page', type: 'image', meta: { owner: 'source', paperId: 'paper', checkpointId: '0' }, bounds: { x: 0, y: 220, w: 900, h: 900 } }
+  const learner = { id: 'shape:learner', type: 'draw', meta: {}, bounds: { x: 1400, y: 300, w: 80, h: 80 } }
+  const later = { id: 'shape:later', type: 'draw', meta: { owner: 'agent', lessonId: 'paper', checkpointId: '1' }, bounds: { x: 3500, y: 220, w: 80, h: 80 } }
+  const editor = fakeEditor([own, material, learner, later])
+  assert.equal(clearConceptMarks(editor, 'paper', 0), 2)
+  assert.deepEqual([...editor.shapes.keys()], [learner.id, later.id])
+  const region = conceptRegion(editor, 'paper', 0)
+  assert.ok(region.y > learner.bounds.y, 'the restarted concept begins on board that is actually empty')
+})
+
+test('a full drawing area makes the tutor move on instead of piling ink into it', async () => {
+  const full = { id: 'shape:full', type: 'draw', meta: { owner: 'agent', lessonId: 'paper', checkpointId: '0', beatId: 'earlier', originX: 1100, originY: 220 }, bounds: { x: 1100, y: 220, w: 600, h: 900 } }
+  const editor = fakeEditor([full])
+  await applyTeachingBeat(editor, { ...beat(2), beatId: 'later', placement: 'continue', actions: [beat(2).actions[0]] }, { lessonId: 'paper', checkpointIndex: 0, signal: new AbortController().signal })
+  const later = [...editor.shapes.values()].find(shape => shape.meta?.beatId === 'later')
+  assert.ok(later.meta.originY >= full.bounds.y + full.bounds.h, 'the next beat starts below the filled area')
+})
+
+test('a labelled arrow grows from tail to head and only then carries its words', async () => {
+  const editor = fakeEditor()
+  const seen = []
+  const watched = { ...editor, updateShape: update => { seen.push(structuredClone(update)); editor.updateShape(update) } }
+  await applyTeachingBeat(watched, {
+    beatId: 'api_round_trip', context: 'Show the request.', speech: 'The app asks the server for the list of users.',
+    pauseMs: 0, waitForLearner: false, placement: 'new-section', anchorBeatId: '',
+    actions: [{ _type: 'arrow', id: 'request', atMs: 0, from: { x: 600, y: 200 }, to: { x: 200, y: 260 }, label: 'GET /users request', color: 'blue', bend: 60, both: false }],
+  }, { lessonId: 'paper', checkpointIndex: 0, signal: new AbortController().signal })
+  const arrow = [...editor.shapes.values()].find(shape => shape.type === 'arrow')
+  assert.ok(arrow, 'the connector is a real arrow shape, not a hand-drawn line')
+  assert.equal(arrow.props.arrowheadEnd, 'arrow')
+  assert.equal(arrow.props.arrowheadStart, 'none')
+  assert.equal(arrow.props.richText, 'GET /users request', 'the finished arrow says what travels along it')
+  assert.deepEqual(arrow.props.end, { x: -400, y: 60 }, 'it points backwards when the source asked it to')
+  assert.equal(arrow.props.bend, 60)
+  assert.equal(arrow.meta.actionState, 'complete')
+  const growth = seen.filter(update => update.props?.end).map(update => update.props.end.x)
+  assert.ok(growth.length > 4 && growth.every((x, index) => index === 0 || x <= growth[index - 1]), 'the shaft grows under the pen')
+  assert.ok(seen.filter(update => update.props?.richText === 'GET /users request').length === 1, 'the label is written once, at the end')
 })
