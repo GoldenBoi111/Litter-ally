@@ -13,7 +13,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 npm run app:local
 ```
 
-Set `OPENAI_API_KEY` in `.env` before building a teaching plan or starting the hybrid voice tutor. Set `EXA_API_KEY` to enable the DeepAgent's backend-owned reputable-source search for missing background. `app:local` starts local Qwen and the persistent WebRTC/Whisper host, chooses an available API port starting at `5186`, and runs the app (Vite starts at `5185` or the next open port); Ctrl+C stops the managed services. `npm run dev` remains available when you want to run the app without managing local voice services.
+Set `OPENAI_API_KEY` in `.env` before building a teaching plan or starting the hybrid voice tutor. Set `EXA_API_KEY` to enable the DeepAgent's backend-owned reputable-source search for missing background. `app:local` starts local Qwen and the persistent Whisper host, chooses an available API port starting at `5186`, and runs the app (Vite starts at `5185` or the next open port); Ctrl+C stops the managed services. `npm run dev` remains available when you want to run the app without managing local voice services.
 
 Copy your OpenAI project key into the existing local `.env` file before generating a plan:
 
@@ -57,7 +57,7 @@ Sources saved in the browser before accounts existed move into the first empty a
 
 Teaching plans, answer review, practice, and diagrams use the OpenAI Responses API with structured output. The planning DeepAgent may search reputable academic, educational, and official sources for missing background; background claims remain separate from the supplied material. A plan action sends extracted text for the selected material, and answer review sends the learner's submitted answer with relevant source evidence. Local import and library storage remain on this device.
 
-Voice uses hold-to-talk with browser Silero VAD and WebRTC to the local Parakeet speech-to-text/Qwen host, with streamed OpenAI Responses calls for the tutor. The microphone is captured only while the learner holds the talk control. Raw audio goes to the local RTC host rather than OpenAI or the hosted app; transcript text is sent to OpenAI. Text questions remain available when voice is stopped or unavailable. Public RTC hosting needs authentication, rate limits, and suitable ICE/TURN connectivity. This repo does not provision them. See [Hybrid voice setup and benchmark results](docs/hybrid-voice.md).
+Voice uses hold-to-talk with browser Silero VAD and an authenticated same-origin WebSocket to the local Parakeet speech-to-text/Qwen host, with streamed OpenAI Responses calls for the tutor. Microphone audio streams while the learner holds the talk control. When tunneling the app through Cloudflare, the mic audio passes through that tunnel to the local API and voice host; transcript text goes to OpenAI. Text questions remain available when voice is stopped or unavailable. See [Hybrid voice setup and benchmark results](docs/hybrid-voice.md).
 
 The local learner profile works across imported sources in this browser. It does not sync between devices. A deployed app still needs an API-function adapter, authentication, rate limits, storage changes, and a separately hosted voice service. Older PDFs imported before page-grounded teaching was added may need re-importing to retain their original bytes.
 The [tldraw Agent Starter Kit](https://tldraw.dev/starter-kits/agent) and [editor API](https://tldraw.dev/docs/editor) describe the canvas architecture used here.

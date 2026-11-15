@@ -2,11 +2,13 @@ import { MicVAD } from '@ricky0123/vad-web'
 import { formatCheckpointBrief, readTeachingBeat, type CheckpointBrief, type SelectionContext, type TeachingBeat, type TeachingExecutionState } from './lessonAgent'
 import { canContinueAfterUnrecognizedInterruption, shouldInterruptOnSpeechStart } from './voice-turn.mjs'
 import { checkApiResponse } from './storage'
+import { openVoiceSocket } from './voiceSocket'
 
 export type TutorStatus = 'idle' | 'connecting' | 'listening' | 'speaking' | 'drawing' | 'paused' | 'stopped' | 'error'
 type SpeechRequest = { resolve: (success: boolean) => void; started: number; turn: number; chunks: ArrayBuffer[]; onStart?: () => void }
 
 export type TutorCallbacks = {
+  clearBoard: () => void
   presentTeachingBeat: (beat: TeachingBeat) => Promise<TeachingExecutionState>
   drawDiagram: (diagramIndex: number, request?: string) => Promise<string>
   showSourcePage: (pageNumber: number) => Promise<{ message: string; imageUrl?: string; pageText?: string }>
@@ -16,6 +18,7 @@ export type TutorCallbacks = {
   /** Erases the agent's board marks for a concept and resets it to its start; returns that concept's brief. */
   restartConcept: (scope: 'current' | 'previous') => Promise<string>
   getSelection: () => SelectionContext | null
+  getSelectionImage: () => Promise<string | undefined>
   getWhiteboardContext: () => string
   getTeachingState: (beatId: string) => TeachingExecutionState
   onStatus: (status: TutorStatus, detail?: string) => void
@@ -28,11 +31,34 @@ type InputItem = { type: 'message'; role: 'user' | 'assistant'; content: string 
   { type: 'function_call_output'; call_id: string; output: string } |
   { type: 'reasoning'; [key: string]: unknown }
 
+const REPEAT_STOP_WORDS = new Set('a an the and or of to in on at for from is are was were this that it its as by into with takes produces called'.split(' '))
+
+function repeatsRecentTutorBeat(speech: string, transcripts: Array<{ role: 'Tutor' | 'You'; text: string }>) {
+  const recentTutorLines: string[] = []
+  for (const line of [...transcripts].reverse()) {
+    if (line.role === 'You') break
+    recentTutorLines.push(line.text)
+    if (recentTutorLines.length === 3) break
+  }
+  const tokens = (text: string) => text.toLowerCase().match(/[a-z0-9]+/g) || []
+  const words = (text: string) => new Set(tokens(text).filter(word => word.length > 2 && !REPEAT_STOP_WORDS.has(word)))
+  const nextTokens = tokens(speech)
+  const next = words(speech)
+  return next.size >= 8 && recentTutorLines.some(line => {
+    const previous = words(line)
+    if (previous.size < 8) return false
+    const shared = [...next].filter(word => previous.has(word)).length
+    const previousTrigrams = new Set(tokens(line).slice(0, -2).map((_, index, all) => all.slice(index, index + 3).join(' ')))
+    const repeatsPhrase = nextTokens.slice(0, -2).some((_, index) => previousTrigrams.has(nextTokens.slice(index, index + 3).join(' ')))
+    return shared / Math.min(next.size, previous.size) >= 0.65 || repeatsPhrase
+  })
+}
+
 export class HybridTutor {
   private vad: MicVAD | null = null
   private micStream: MediaStream | null = null
-  private peer: RTCPeerConnection | null = null
-  private control: RTCDataChannel | null = null
+  private control: WebSocket | null = null
+  private closeVoiceSocket: (() => void) | null = null
   private readonly speechRequests = new Map<string, SpeechRequest>()
   private speechSequence = 0
   private audioContext: AudioContext | null = null
@@ -41,6 +67,7 @@ export class HybridTutor {
   private readonly sources = new Set<AudioBufferSourceNode>()
   private readonly ttsControllers = new Set<AbortController>()
   private input: InputItem[] = []
+  private selectionPending = false
   private title = ''
   private brief: CheckpointBrief | null = null
   private turnId = 0
@@ -68,24 +95,23 @@ export class HybridTutor {
   private interruptedBeat: { id: string; spokenComplete: boolean; drawingComplete: boolean } | null = null
   private interruptedForInput = false
   private lastBeatEndedAt = 0
-  private automaticBeatStreak = 0
+  private diagramAttempt = 0
+  private readonly requestedDiagrams = new Set<string>()
   private readonly seenBeatIds = new Set<string>()
+  private readonly completedBeatIds = new Set<string>()
+  private repeatedBeatRetries = 0
   private readonly streaming: boolean
   private readonly bargeIn: boolean
-  private readonly rtcUrl: string
-  private readonly iceServers: RTCIceServer[]
-  /** True when the local WebRTC voice host is unreachable and we fall back to the browser's own speech APIs. */
+  /** True when the local voice host is unreachable and we fall back to the browser's own speech APIs. */
   private browserVoice = false
   private recognition: { start(): void; stop(): void; abort(): void; onresult: ((e: any) => void) | null; onerror: ((e: any) => void) | null; onend: (() => void) | null; lang: string; interimResults: boolean; continuous: boolean } | null = null
   private recognized = ''
   /** Set when the learner cut the tutor off to ask something: answer, then pick the lesson back up. */
   private resumeAfterAnswer = false
 
-  constructor(private callbacks: TutorCallbacks, private preparedAudioContext?: AudioContext, options: { streaming?: boolean; bargeIn?: boolean; rtcUrl?: string; iceServers?: RTCIceServer[] } = {}) {
+  constructor(private callbacks: TutorCallbacks, private preparedAudioContext?: AudioContext, options: { streaming?: boolean; bargeIn?: boolean } = {}) {
     this.streaming = options.streaming !== false
     this.bargeIn = options.bargeIn !== false
-    this.rtcUrl = options.rtcUrl || 'http://127.0.0.1:8190'
-    this.iceServers = options.iceServers || []
   }
 
   async connect(paperTitle: string, brief: CheckpointBrief) {
@@ -98,13 +124,15 @@ export class HybridTutor {
     this.title = paperTitle
     this.brief = brief
     this.input = []
+    this.selectionPending = false
     this.transcripts = []
     this.seenBeatIds.clear()
+    this.completedBeatIds.clear()
     this.currentBeat = null
     this.interruptedBeat = null
     this.queuedTeachingBeats = 0
     this.lastBeatEndedAt = 0
-    this.automaticBeatStreak = 0
+    this.requestedDiagrams.clear()
     this.callbacks.onStatus('connecting', 'Loading local speech detection and requesting microphone access…')
     this.audioContext = this.preparedAudioContext || new AudioContext()
     this.speechOutput = createSpeechOutput(this.audioContext)
@@ -114,7 +142,15 @@ export class HybridTutor {
     this.micStream = micStream
     this.browserVoice = false
     try {
-      await this.connectRtc(micStream)
+      const voice = await openVoiceSocket(micStream, data => this.onVoiceMessage(data))
+      this.control = voice.socket
+      this.closeVoiceSocket = voice.close
+      voice.socket.onclose = () => {
+        if (this.closed) return
+        for (const request of this.speechRequests.values()) request.resolve(false)
+        this.speechRequests.clear()
+        this.callbacks.onStatus('error', 'The local voice connection was lost. Stop and restart the tutor to reconnect.')
+      }
     } catch (error) {
       if (!browserSpeechAvailable()) throw error
       // No local voice host (e.g. on a Mac without the Windows voice stack): speak and listen with the browser instead.
@@ -163,6 +199,7 @@ export class HybridTutor {
     if (this.closed || (!this.vad && !this.browserVoice)) return
     await this.vad?.pause()
     this.callbacks.onStatus('listening', this.browserVoice ? 'Local voice host not running, so using your browser\'s voice. Hold the mic to talk.' : 'Hold the microphone button to speak; release to send.')
+    this.callbacks.clearBoard()
     this.input.push({ type: 'message', role: 'user', content: `Begin checkpoint “${brief.checkpoint.title}”. Follow the checkpoint brief, show the first cited page, and start teaching its specific focus right away without asking me anything first.` })
     void this.respond()
   }
@@ -173,6 +210,7 @@ export class HybridTutor {
       this.interruptedForInput = false
       this.appendInterruptedState()
       const text = message.trim()
+      this.selectionPending = true
       this.transcripts = [...this.transcripts, { role: 'You' as const, text }].slice(-8)
       this.callbacks.onTranscript(this.transcripts)
       this.input.push({ type: 'message', role: 'user', content: text })
@@ -189,6 +227,10 @@ export class HybridTutor {
 
   updateCheckpointBrief(brief: CheckpointBrief) {
     if (!this.closed && !this.paused) {
+      if (this.brief?.checkpoint.title !== brief.checkpoint.title) {
+        this.diagramAttempt += 1
+        this.requestedDiagrams.clear()
+      }
       this.brief = brief
       this.input.push({ type: 'message', role: 'user', content: `Updated learner context for the current checkpoint:\n${formatCheckpointBrief(brief)}` })
     }
@@ -197,6 +239,7 @@ export class HybridTutor {
   askAboutSelection(imageUrl?: string) {
     if (this.closed) return
     this.interrupt()
+    this.selectionPending = true
     this.interruptedForInput = false
     this.appendInterruptedState()
     this.input.push({
@@ -322,8 +365,8 @@ export class HybridTutor {
     this.vad = null
     for (const track of this.micStream?.getTracks() || []) track.stop()
     this.micStream = null
-    this.peer?.close()
-    this.peer = null
+    this.closeVoiceSocket?.()
+    this.closeVoiceSocket = null
     this.control = null
     for (const request of this.speechRequests.values()) request.resolve(false)
     this.speechRequests.clear()
@@ -357,7 +400,6 @@ export class HybridTutor {
     this.speechQueue = Promise.resolve()
     this.queuedTeachingBeats = 0
     this.currentBeat = null
-    this.automaticBeatStreak = 0
     if (wasPlaying && !this.interruptionSources) {
       recordMetric('interruptionToSilenceMs', performance.now() - interruptedAt)
       this.interruptionAt = 0
@@ -384,49 +426,8 @@ export class HybridTutor {
 
   private responseController: AbortController | null = null
 
-  private async connectRtc(stream: MediaStream) {
-    const peer = new RTCPeerConnection({ iceServers: this.iceServers })
-    this.peer = peer
-    const channel = peer.createDataChannel('voice-control')
-    this.control = channel
-    channel.binaryType = 'arraybuffer'
-    channel.onmessage = event => this.onVoiceMessage(event.data)
-    peer.onconnectionstatechange = () => {
-      if (peer.connectionState === 'failed') {
-        for (const request of this.speechRequests.values()) request.resolve(false)
-        this.speechRequests.clear()
-        this.callbacks.onStatus('error', 'The local voice connection was lost. Stop and restart the tutor to reconnect.')
-      }
-    }
-    for (const track of stream.getAudioTracks()) peer.addTrack(track, stream)
-    try {
-      await peer.setLocalDescription(await peer.createOffer())
-      await waitForIce(peer)
-      const local = peer.localDescription
-      if (!local) throw new Error('WebRTC could not create a local offer.')
-      const offerUrl = new URL(`${this.rtcUrl.replace(/\/$/, '')}/offer`)
-      const offerRequest: RequestInit & { targetAddressSpace?: 'loopback' | 'local' } = {
-        method: 'POST', signal: AbortSignal.timeout(20_000),
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sdp: local.sdp, type: local.type }),
-      }
-      if (['localhost', '127.0.0.1', '[::1]'].includes(offerUrl.hostname)) offerRequest.targetAddressSpace = 'loopback'
-      const response = await fetch(offerUrl, offerRequest)
-      const answer = await response.json().catch(() => ({})) as RTCSessionDescriptionInit & { error?: string }
-      if (!response.ok || !answer.sdp || !answer.type) throw new Error(answer.error || `Local voice host returned HTTP ${response.status}.`)
-      await peer.setRemoteDescription(answer)
-      await waitForDataChannel(channel)
-    } catch (error) {
-      peer.close()
-      if (this.peer === peer) this.peer = null
-      if (this.control === channel) this.control = null
-      if (error instanceof TypeError) throw new Error(`Could not reach the local voice host at ${this.rtcUrl}. Check its URL, CORS origins, and that the service is running.`)
-      throw error
-    }
-  }
-
   private sendControl(message: Record<string, unknown>) {
-    if (this.control?.readyState !== 'open') return false
+    if (this.control?.readyState !== WebSocket.OPEN) return false
     try { this.control.send(JSON.stringify(message)); return true }
     catch { return false }
   }
@@ -517,14 +518,15 @@ export class HybridTutor {
     if (turn !== this.turnId || this.closed || this.paused) return
     const text = value.trim()
     if (!text) { this.callbacks.onStatus('listening'); return }
+    this.selectionPending = true
     this.interruptedForInput = false
     this.appendInterruptedState()
     this.transcripts = [...this.transcripts, { role: 'You' as const, text }].slice(-8)
     this.callbacks.onTranscript(this.transcripts)
     if (this.resumeAfterAnswer) {
       this.resumeAfterAnswer = false
-      this.input.push({ type: 'message', role: 'user', content: `${text}\n\n(I cut you off mid-explanation to say this. Answer me directly and briefly first. Then say a short bridge like "Back to where we were" and continue the lesson from exactly where you stopped, finishing the interrupted explanation and its drawing by reusing the same beatId.)` })
-    } else this.input.push({ type: 'message', role: 'user', content: text })
+      this.input.push({ type: 'message', role: 'user', content: `${text}\n\n(I cut you off mid-explanation. Answer directly first, then resume the current lesson from where you stopped, unless I asked you to stop or switch topics.)` })
+    } else this.input.push({ type: 'message', role: 'user', content: `${text}\n\n(Answer directly first, then resume the current lesson with its next teaching beat, unless I asked you to stop or switch topics.)` })
     if (this.isBusy()) this.pendingResponse = true
     else void this.respond()
   }
@@ -534,6 +536,8 @@ export class HybridTutor {
     this.trimHistory()
     const turn = this.turnId
     const inputCount = this.input.length
+    const includeSelection = this.selectionPending
+    this.selectionPending = false
     const requestInput: InputItem[] = [...this.input, { type: 'message', role: 'user', content: `(Board telemetry, not a new learner turn. Continue the pending lesson or question using this current whiteboard state as data: ${this.callbacks.getWhiteboardContext()})` }]
     this.assistantBusy = true
     this.pendingResponse = false
@@ -549,9 +553,17 @@ export class HybridTutor {
     const calls: Array<Extract<InputItem, { type: 'function_call' }>> = []
     let responseOutput: InputItem[] = []
     const toolResults: Array<{ output: string; context?: InputItem; continueAutomatically?: boolean }> = []
-    let pendingTools = 0
     let toolTail = Promise.resolve()
     try {
+      const selection = includeSelection ? this.callbacks.getSelection() : null
+      if (selection) {
+        const imageUrl = await this.callbacks.getSelectionImage().catch(() => undefined)
+        if (controller.signal.aborted || turn !== this.turnId || this.closed) return
+        requestInput.splice(-1, 0, { type: 'message', role: 'user', content: [
+          { type: 'input_text', text: `Board reference for the learner's latest mark or selection: ${JSON.stringify({ ...selection, shapes: selection.shapes.slice(0, 40) })}. The mark points to the content inside it; use the image crop to identify what the learner means.` },
+          ...(imageUrl ? [{ type: 'input_image', image_url: imageUrl }] : []),
+        ] })
+      }
       const response = await fetch('/api/voice/respond', {
         method: 'POST', signal: controller.signal,
         headers: { 'content-type': 'application/json' },
@@ -578,27 +590,12 @@ export class HybridTutor {
             }
             accumulated += event.text
             phraseBuffer += event.text
-            this.callbacks.onStatus('speaking')
-            if (this.streaming && !pendingTools) {
-              for (const phrase of takeSpeakablePhrases(() => phraseBuffer, value => { phraseBuffer = value })) {
-                this.recordFirstPhrase()
-                this.enqueueSpeech(phrase, turn)
-              }
-            }
           } else if (event.type === 'tool' && event.call) {
             const call = event.call
             calls.push(call)
-            pendingTools += 1
             toolTail = toolTail.then(async () => {
               const result = await this.executeTool(call.name, call.arguments)
               toolResults.push(result)
-              pendingTools -= 1
-              if (!pendingTools && this.streaming && turn === this.turnId) {
-                for (const phrase of takeSpeakablePhrases(() => phraseBuffer, value => { phraseBuffer = value })) {
-                  this.recordFirstPhrase()
-                  this.enqueueSpeech(phrase, turn)
-                }
-              }
             })
           }
           else if (event.type === 'output' && event.output) responseOutput = event.output
@@ -609,9 +606,18 @@ export class HybridTutor {
       await toolTail
       if (turn !== this.turnId || this.closed) return
       if (this.responseController === controller) this.responseController = null
-      if (this.streaming) {
-        if (phraseBuffer.trim()) this.enqueueSpeech(phraseBuffer.trim(), turn)
-      } else {
+      const hasTeachingBeat = calls.some(call => call.name === 'present_teaching_beat')
+      const continuesWithTools = calls.length > 0 && toolResults.every(result => result.continueAutomatically !== false)
+      const shouldSpeakText = !hasTeachingBeat && !continuesWithTools && !repeatsRecentTutorBeat(accumulated, this.transcripts)
+      if (shouldSpeakText && accumulated.trim()) this.callbacks.onStatus('speaking')
+      if (shouldSpeakText && this.streaming) {
+        while (phraseBuffer.length > 280) {
+          const phrases = takeSpeakablePhrases(() => phraseBuffer, value => { phraseBuffer = value })
+          if (!phrases.length) break
+          for (const phrase of phrases) { this.recordFirstPhrase(); this.enqueueSpeech(phrase, turn) }
+        }
+        if (phraseBuffer.trim()) { this.recordFirstPhrase(); this.enqueueSpeech(phraseBuffer.trim(), turn) }
+      } else if (shouldSpeakText) {
         phraseBuffer = accumulated
         while (phraseBuffer.length > 280) {
           const phrases = takeSpeakablePhrases(() => phraseBuffer, value => { phraseBuffer = value })
@@ -621,7 +627,7 @@ export class HybridTutor {
         if (phraseBuffer.trim()) { this.recordFirstPhrase(); this.enqueueSpeech(phraseBuffer.trim(), turn) }
       }
       const responseItems: InputItem[] = responseOutput
-      if (accumulated.trim()) {
+      if (shouldSpeakText && accumulated.trim()) {
         this.transcripts = [...this.transcripts, { role: 'Tutor' as const, text: accumulated.trim() }].slice(-8)
         this.callbacks.onTranscript(this.transcripts)
       }
@@ -632,7 +638,7 @@ export class HybridTutor {
       }
       this.input.splice(inputCount, 0, ...responseItems)
       this.assistantBusy = false
-      if (calls.length && toolResults.some(result => result.continueAutomatically !== false)) void this.respond()
+      if (calls.length && toolResults.every(result => result.continueAutomatically !== false)) void this.respond()
       else void this.speechQueue.finally(() => {
         if (turn === this.turnId && !this.closed && !this.paused) this.callbacks.onStatus('listening')
         this.startPendingResponse()
@@ -691,7 +697,7 @@ export class HybridTutor {
           this.speechRequests.delete(id)
           resolve(false)
         }, { once: true })
-        if (!this.control || this.control.readyState !== 'open') resolve(false)
+        if (!this.control || this.control.readyState !== WebSocket.OPEN) resolve(false)
         else if (!this.sendControl({ type: 'speak', id, text })) resolve(false)
       })
       return succeeded && turn === this.turnId && !controller.signal.aborted
@@ -780,6 +786,7 @@ export class HybridTutor {
       })
       await Promise.all([drawing, spoken])
       if (turn !== this.turnId || this.closed || this.paused) return
+      if (this.currentBeat?.id === beat.beatId && this.currentBeat.spokenComplete && this.currentBeat.drawingComplete) this.completedBeatIds.add(beat.beatId)
       this.lastBeatEndedAt = performance.now()
       if (beat.pauseMs) await new Promise(resolve => window.setTimeout(resolve, beat.pauseMs))
       if (this.currentBeat?.id === beat.beatId) this.currentBeat = null
@@ -793,6 +800,20 @@ export class HybridTutor {
     while (turn === this.turnId && !this.closed && this.sources.size) await new Promise(resolve => window.setTimeout(resolve, 30))
   }
 
+  private startDiagram(request: string, diagramIndex = 0) {
+    const key = String(diagramIndex)
+    if (this.requestedDiagrams.has(key)) return
+    this.requestedDiagrams.add(key)
+    const turn = this.turnId
+    const attempt = ++this.diagramAttempt
+    void this.callbacks.drawDiagram(diagramIndex, request.slice(0, 600)).then(result => {
+      if (turn === this.turnId && attempt === this.diagramAttempt && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: ${result})` })
+    }).catch(error => {
+      this.requestedDiagrams.delete(key)
+      if (turn === this.turnId && attempt === this.diagramAttempt && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: the diagram failed: ${error instanceof Error ? error.message : 'unknown error'}. Continue without it.)` })
+    })
+  }
+
   private async executeTool(name: string, raw: string): Promise<{ output: string; context?: InputItem; continueAutomatically?: boolean }> {
     const args = JSON.parse(raw) as Record<string, unknown>
     let output = 'Unknown tool.'
@@ -801,10 +822,21 @@ export class HybridTutor {
     this.callbacks.onStatus('drawing')
     if (name === 'present_teaching_beat') {
       const beat = readTeachingBeat(args)
-      await this.queueTeachingBeat(beat, this.turnId)
-      this.automaticBeatStreak = beat.waitForLearner ? 0 : this.automaticBeatStreak + 1
-      continueAutomatically = !beat.waitForLearner && this.automaticBeatStreak < 3
-      output = `Queued teaching beat ${beat.beatId}. Stable actions will resume instead of duplicating if interrupted.`
+      if (this.completedBeatIds.has(beat.beatId)) {
+        output = `Beat ${beat.beatId} already finished; do not repeat its speech or drawing. Continue with a genuinely new point and a new beat id, or stop if the lesson is complete.`
+      } else if (repeatsRecentTutorBeat(beat.speech, this.transcripts)) {
+        this.repeatedBeatRetries += 1
+        output = 'That beat repeats the previous explanation. Continue with a genuinely new next point, example, mechanism, or application; do not paraphrase the same definition.'
+        if (this.repeatedBeatRetries >= 2) {
+          continueAutomatically = false
+          output = 'Repeated content was suppressed twice. Stop here and wait for the learner instead of saying the same point again.'
+        }
+      } else {
+        this.repeatedBeatRetries = 0
+        await this.queueTeachingBeat(beat, this.turnId)
+        continueAutomatically = !beat.waitForLearner
+        output = `Queued teaching beat ${beat.beatId}. Stable actions will resume instead of duplicating if interrupted.`
+      }
     } else if (name === 'show_source_page' && Number.isInteger(args.pageNumber)) {
       const result = await this.callbacks.showSourcePage(Number(args.pageNumber))
       output = result.pageText ? `${result.message}\n${result.pageText}` : result.message
@@ -840,25 +872,23 @@ export class HybridTutor {
       output = this.callbacks.readSourcePage(Number(args.pageNumber))
     } else if (name === 'draw_lesson_diagram' && Number.isInteger(args.diagramIndex)) {
       const request = typeof args.request === 'string' ? args.request.trim().slice(0, 600) : ''
-      // Don't block the voice on diagram planning + drawing: start it and let the tutor keep talking while ink appears.
-      const turn = this.turnId
-      void this.callbacks.drawDiagram(Number(args.diagramIndex), request).then(result => {
-        if (turn === this.turnId && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: ${result})` })
-      }).catch(error => {
-        if (turn === this.turnId && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: the diagram failed: ${error instanceof Error ? error.message : 'unknown error'}. Continue without it.)` })
-      })
-      output = 'The diagram has started drawing on the board and will appear stroke by stroke over the next half minute. Do not wait for it: start explaining right now with present_teaching_beat, walking through the idea in the order it is being drawn, and do not call draw_lesson_diagram again for it.'
+      this.startDiagram(request, Number(args.diagramIndex))
+      output = 'A detailed visual is being drawn in the background. Continue explaining with present_teaching_beat while it appears; do not request the same diagram again.'
     } else if (name === 'restart_concept' && (args.scope === 'current' || args.scope === 'previous')) {
       const brief = await this.callbacks.restartConcept(args.scope)
+      this.diagramAttempt += 1
+      this.requestedDiagrams.clear()
       // Forget the erased beats so the re-teach draws fresh instead of "resuming" marks that no longer exist.
       this.currentBeat = null
       this.interruptedBeat = null
       this.resumeAfterAnswer = false
-      this.automaticBeatStreak = 0
       this.seenBeatIds.clear()
+      this.completedBeatIds.clear()
       output = `The board for this concept is cleared and the concept is reset to its start. Re-teach it from its very first point with new beat ids, more simply than before, and do not mention the erased marks.\n\n${brief}`
     } else if (name === 'move_checkpoint' && (args.direction === 'next' || args.direction === 'previous')) {
       output = await this.callbacks.moveCheckpoint(args.direction)
+      this.diagramAttempt += 1
+      this.requestedDiagrams.clear()
     } else if (name === 'inspect_canvas_selection' && typeof args.question === 'string') {
       const selection = this.callbacks.getSelection()
       output = selection ? JSON.stringify({ question: args.question, ...selection }) : 'Nothing is selected. Ask the learner to select the shape or circle they want explained.'
@@ -885,41 +915,9 @@ export function createSpeechOutput(context: AudioContext): AudioNode {
 const SPEECH_GAIN = 2.5
 
 function browserSpeechAvailable() {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined'
+  return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined' && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
 }
 
-function waitForIce(peer: RTCPeerConnection) {
-  if (peer.iceGatheringState === 'complete') return Promise.resolve()
-  return new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(() => finish(peer.localDescription?.sdp?.includes('a=candidate:')
-      ? undefined
-      : new Error('No WebRTC network candidates were found. Check local network access and the configured ICE servers.')), 4_000)
-    const onChange = () => { if (peer.iceGatheringState === 'complete') finish() }
-    const finish = (error?: Error) => {
-      window.clearTimeout(timeout)
-      peer.removeEventListener('icegatheringstatechange', onChange)
-      error ? reject(error) : resolve()
-    }
-    peer.addEventListener('icegatheringstatechange', onChange)
-  })
-}
-
-function waitForDataChannel(channel: RTCDataChannel) {
-  if (channel.readyState === 'open') return Promise.resolve()
-  return new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(() => finish(new Error('Timed out opening the local voice data channel.')), 15_000)
-    const onOpen = () => finish()
-    const onClose = () => finish(new Error('The local voice host closed the data channel.'))
-    const finish = (error?: Error) => {
-      window.clearTimeout(timeout)
-      channel.removeEventListener('open', onOpen)
-      channel.removeEventListener('close', onClose)
-      error ? reject(error) : resolve()
-    }
-    channel.addEventListener('open', onOpen)
-    channel.addEventListener('close', onClose)
-  })
-}
 
 function takeSpeakablePhrases(read: () => string, write: (value: string) => void) {
   const phrases: string[] = []

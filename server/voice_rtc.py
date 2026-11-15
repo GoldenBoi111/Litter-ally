@@ -1,5 +1,7 @@
 import asyncio
 import base64
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -31,6 +33,8 @@ TTS_URL = os.getenv("LOCAL_TTS_URL", "http://127.0.0.1:8187").rstrip("/") + "/v1
 TTS_MODEL = os.getenv("LOCAL_TTS_MODEL", "qwen3-custom")
 TTS_VOICE = os.getenv("LOCAL_TTS_VOICE", "Aiden")
 STUN_URL = os.getenv("VOICE_RTC_STUN_URL", "").strip()
+TURN_URL = os.getenv("VOICE_RTC_TURN_URL", "").strip()
+TURN_SECRET = os.getenv("VOICE_RTC_TURN_SECRET", "").strip()
 TTS_INSTRUCT = "Speak in a warm, engaged, conversational teaching voice. Match emotion to meaning, use natural pitch variation and connected phrasing, and avoid theatrical or sing-song delivery."
 ALLOWED_ORIGINS = {item.strip() for item in os.getenv("VOICE_RTC_ALLOWED_ORIGINS", "http://127.0.0.1:5185,http://localhost:5185").split(",") if item.strip()}
 MAX_OFFER_BYTES = 1_000_000
@@ -142,6 +146,10 @@ async def handle_offer(request):
         raise web.HTTPBadRequest(text="A valid WebRTC offer is required.")
 
     ice_servers = [RTCIceServer(urls=STUN_URL)] if STUN_URL else []
+    if TURN_URL and TURN_SECRET:
+        username = f"{int(time.time()) + 3600}:litterally"
+        credential = base64.b64encode(hmac.new(TURN_SECRET.encode(), username.encode(), hashlib.sha1).digest()).decode()
+        ice_servers.append(RTCIceServer(urls=TURN_URL, username=username, credential=credential))
     pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
     pcs.add(pc)
     state = {"ring": deque(maxlen=RING_FRAMES), "segment": None, "segment_samples": 0, "recording": False, "turn": None, "channel": None, "tasks": {}}
@@ -274,7 +282,10 @@ async def cors(request, handler):
         origin = request.headers.get("Origin", "")
         if not origin_allowed(origin):
             raise web.HTTPForbidden(text="Origin is not allowed.")
-        return web.Response(status=204, headers={"Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Max-Age": "600", "Vary": "Origin"})
+        headers = {"Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Max-Age": "600", "Vary": "Origin"}
+        if request.headers.get("Access-Control-Request-Private-Network") == "true":
+            headers["Access-Control-Allow-Private-Network"] = "true"
+        return web.Response(status=204, headers=headers)
     response = await handler(request)
     origin = request.headers.get("Origin", "")
     if origin_allowed(origin) and not response.prepared:
@@ -303,8 +314,8 @@ async def source_transcribe(request):
     if audio.size < 1_600 or audio.size > MAX_SEGMENT_SAMPLES or not np.isfinite(audio).all():
         raise web.HTTPBadRequest(text="Invalid audio chunk.")
     async with asr_semaphore:
-        result = await asyncio.to_thread(transcribe, audio, "")
-    return web.json_response({"text": result["text"]})
+        result = await asyncio.to_thread(transcribe, audio, request.headers.get("X-Voice-Prompt", "")[:2_000])
+    return web.json_response(result)
 
 
 async def diagnostic_speech(request):

@@ -7,7 +7,7 @@ $logPath = Join-Path $runtime 'voice-rtc.log'
 if (-not (Test-Path $python)) { throw 'Run .\scripts\setup-voice.ps1 first.' }
 $envPath = Join-Path $root '.env'
 if (Test-Path $envPath) {
-  $settings = @('LOCAL_STT_PROVIDER', 'LOCAL_STT_MODEL', 'LOCAL_TTS_URL', 'LOCAL_TTS_MODEL', 'LOCAL_TTS_VOICE', 'VOICE_RTC_BIND', 'VOICE_RTC_PORT', 'VOICE_RTC_ALLOWED_ORIGINS', 'VOICE_RTC_DIAGNOSTICS', 'VOICE_RTC_STUN_URL')
+  $settings = @('LOCAL_STT_PROVIDER', 'LOCAL_STT_MODEL', 'LOCAL_TTS_URL', 'LOCAL_TTS_MODEL', 'LOCAL_TTS_VOICE', 'VOICE_RTC_BIND', 'VOICE_RTC_PORT', 'VOICE_RTC_ALLOWED_ORIGINS', 'VOICE_RTC_DIAGNOSTICS')
   foreach ($line in Get-Content $envPath) {
     if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$' -and $settings -contains $Matches[1]) {
       $value = $Matches[2].Trim().Trim('"').Trim("'")
@@ -19,7 +19,7 @@ if (-not $env:VOICE_RTC_DIAGNOSTICS) {
   if ($env:VOICE_RTC_BIND -and $env:VOICE_RTC_BIND -notin @('127.0.0.1', 'localhost', '::1')) { $env:VOICE_RTC_DIAGNOSTICS = 'false' }
   else { $env:VOICE_RTC_DIAGNOSTICS = 'true' }
 }
-try { Invoke-RestMethod http://127.0.0.1:8190/health -TimeoutSec 2 | Out-Null; Write-Host 'WebRTC voice service is already running.'; return } catch { }
+try { Invoke-RestMethod http://127.0.0.1:8190/health -TimeoutSec 2 | Out-Null; Write-Host 'Local voice service is already running.'; return } catch { }
 $process = Start-Process -FilePath $python -ArgumentList (Join-Path $root 'server/voice_rtc.py') -WorkingDirectory $root -WindowStyle Hidden -PassThru -RedirectStandardOutput $logPath -RedirectStandardError (Join-Path $runtime 'voice-rtc-error.log')
 $process.Id | Set-Content -Encoding ascii $pidPath
 $deadline = (Get-Date).AddMinutes(3)

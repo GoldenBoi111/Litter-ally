@@ -27,6 +27,9 @@ function deployVoiceAssets() {
         await mkdir(dirname(destination), { recursive: true })
         await copyFile(resolve(root, 'node_modules', source), destination)
       }))
+      const worklet = resolve(outDir, 'voice-assets/voice-pcm-worklet.js')
+      await mkdir(dirname(worklet), { recursive: true })
+      await copyFile(resolve(root, 'src/voice-pcm-worklet.js'), worklet)
     },
   }
 }
@@ -37,7 +40,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss(), deployVoiceAssets()],
     resolve: { alias: { '@': resolve(process.cwd(), 'src') } },
     server: {
-      proxy: { '/api': process.env.PAPER_BOARD_API_URL || env.PAPER_BOARD_API_URL || 'http://127.0.0.1:5186' },
+      allowedHosts: ['www.litter-ally.study'],
+      proxy: { '/api': { target: process.env.PAPER_BOARD_API_URL || env.PAPER_BOARD_API_URL || 'http://127.0.0.1:5186', ws: true } },
     },
   }
 })

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { diagramPlanSchema, validateDiagramPlan, validateTeachingBeat } from './agent-actions.mjs'
+import { diagramPlanSchema, generateValidatedDiagram, validateDiagramPlan, validateTeachingBeat } from './agent-actions.mjs'
 
 const valid = {
   actions: [
@@ -27,11 +27,28 @@ test('allows detailed freehand diagrams within the action bound', () => {
 })
 
 test('allows a recognizable freehand sketch without a text label', () => {
-  const actions = Array.from({ length: 4 }, (_, index) => ({
+  const actions = Array.from({ length: 5 }, (_, index) => ({
     _type: 'stroke', id: `part_${index}`, atMs: 0, points: [{ x: index * 10, y: 0 }, { x: index * 10, y: 10 }],
     color: 'black', size: 'm', closed: false,
   }))
-  assert.equal(validateDiagramPlan({ actions }).actions.length, 4)
+  assert.equal(validateDiagramPlan({ actions }).actions.length, 5)
+  assert.throws(() => validateDiagramPlan({ actions: actions.slice(0, 4) }), /outside the supported range/)
+})
+
+test('rejects sparse concept maps and unlabelled relationships', () => {
+  assert.throws(() => validateDiagramPlan({ actions: valid.actions.slice(0, 4) }), /outside the supported range/)
+  assert.throws(() => validateDiagramPlan({ actions: [...valid.actions.slice(0, 4), { ...valid.actions[4], label: ' ' }] }), /invalid connection/)
+})
+
+test('retries an inadequate diagram once with the reason, then stops', async () => {
+  const issues = []
+  const result = await generateValidatedDiagram(issue => {
+    issues.push(issue)
+    return issues.length === 1 ? { actions: valid.actions.slice(0, 4) } : valid
+  })
+  assert.equal(result, valid)
+  assert.match(issues[1], /outside the supported range/)
+  await assert.rejects(generateValidatedDiagram(() => ({ actions: [] })), /could not be made detailed enough/)
 })
 
 test('gives every strict diagram action discriminator an explicit JSON Schema type', () => {
@@ -45,16 +62,16 @@ test('gives every strict diagram action discriminator an explicit JSON Schema ty
 })
 
 test('rejects destructive actions outside the agent vocabulary', () => {
-  assert.throws(() => validateDiagramPlan({ actions: [...valid.actions.slice(0, 3), { _type: 'delete', id: 'remove-user-work' }] }), /Unsupported diagram action/)
+  assert.throws(() => validateDiagramPlan({ actions: [...valid.actions.slice(0, 4), { _type: 'delete', id: 'remove-user-work' }] }), /Unsupported diagram action/)
 })
 
 test('rejects connections to shapes that were not created by the plan', () => {
-  const actions = [...valid.actions.slice(0, 3), { ...valid.actions[3], toId: 'user-shape' }]
+  const actions = [...valid.actions.slice(0, 3), { ...valid.actions[3], toId: 'user-shape' }, valid.actions[4]]
   assert.throws(() => validateDiagramPlan({ actions }), /must follow/)
 })
 
 test('rejects a connection streamed before its endpoint shapes', () => {
-  assert.throws(() => validateDiagramPlan({ actions: [valid.actions[3], ...valid.actions.slice(0, 3)] }), /must follow/)
+  assert.throws(() => validateDiagramPlan({ actions: [valid.actions[3], ...valid.actions.slice(0, 3), valid.actions[4]] }), /must follow/)
 })
 
 const validBeat = {
@@ -75,6 +92,27 @@ test('rejects unsafe, unbounded, and duplicate teaching actions', () => {
   assert.throws(() => validateTeachingBeat({ ...validBeat, actions: [validBeat.actions[0], { ...validBeat.actions[1], id: 'equation' }] }), /duplicate action id/)
   assert.throws(() => validateTeachingBeat({ ...validBeat, actions: [{ _type: 'remove', id: 'erase', atMs: 0, targetId: '../user-shape' }] }), /invalid revision target/)
   assert.throws(() => validateTeachingBeat({ ...validBeat, speech: 'x'.repeat(601) }), /invalid teaching beat/)
+})
+
+const arrowBeat = arrow => ({
+  beatId: 'api_round_trip', context: 'Show the request and the response.', speech: 'The app asks the server for the list, and the server answers.',
+  pauseMs: 0, waitForLearner: true, placement: 'continue', anchorBeatId: '',
+  actions: [{ _type: 'arrow', id: 'request', atMs: 0, from: { x: 220, y: 200 }, to: { x: 640, y: 200 }, label: 'GET /users request', color: 'blue', bend: 0, both: false, ...arrow }],
+})
+
+test('accepts labelled arrows for a request and its bent return path', () => {
+  const beat = arrowBeat()
+  assert.deepEqual(validateTeachingBeat(structuredClone(beat)), beat)
+  const back = arrowBeat({ id: 'response', from: { x: 640, y: 230 }, to: { x: 220, y: 230 }, label: '200 OK + JSON list', bend: 90 })
+  assert.deepEqual(validateTeachingBeat(structuredClone(back)), back)
+})
+
+test('an arrow must say what travels along it, and must go somewhere', () => {
+  assert.throws(() => validateTeachingBeat(arrowBeat({ label: '' })), /invalid labelled arrow/)
+  assert.throws(() => validateTeachingBeat(arrowBeat({ label: '   ' })), /invalid labelled arrow/)
+  assert.throws(() => validateTeachingBeat(arrowBeat({ to: { x: 220, y: 200 } })), /invalid labelled arrow/)
+  assert.throws(() => validateTeachingBeat(arrowBeat({ to: { x: 1400, y: 200 } })), /invalid labelled arrow/)
+  assert.throws(() => validateTeachingBeat(arrowBeat({ bend: 900 })), /invalid labelled arrow/)
 })
 
 const widgetBeat = widget => ({ beatId: 'data', context: 'Show the figures.', speech: 'Here are the numbers from the study.', pauseMs: 0, waitForLearner: true, placement: 'new-section', anchorBeatId: '', actions: [{ _type: 'widget', id: 'chart', atMs: 0, x: 40, y: 40, w: 520, h: 320, title: 'Results', labels: [], series: [], rows: [], unit: '', ...widget }] })

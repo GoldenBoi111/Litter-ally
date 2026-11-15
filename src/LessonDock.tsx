@@ -3,7 +3,6 @@ import type { TeachingPlan } from './lessonAgent'
 import type { TutorStatus } from './hybridTutor'
 
 const CC_KEY = 'litterally-captions'
-const POS_KEY = 'litterally-lesson-bar-pos'
 
 /** Roughly two caption lines: the newest words of what the tutor is saying. */
 function captionTail(text: string, max = 150) {
@@ -11,32 +10,6 @@ function captionTail(text: string, max = 150) {
   if (clean.length <= max) return clean
   const cut = clean.slice(-max)
   return '…' + cut.slice(cut.indexOf(' ') + 1)
-}
-
-function useDraggable() {
-  const ref = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(() => {
-    try { return JSON.parse(localStorage.getItem(POS_KEY) || 'null') } catch { return null }
-  })
-  const onGripDown = (e: React.PointerEvent) => {
-    const el = ref.current, parent = el?.offsetParent as HTMLElement | null
-    if (!el || !parent) return
-    e.preventDefault()
-    const box = el.getBoundingClientRect(), area = parent.getBoundingClientRect()
-    const dx = e.clientX - box.left, dy = e.clientY - box.top
-    const move = (ev: PointerEvent) => {
-      const x = Math.min(Math.max(0, ev.clientX - area.left - dx), area.width - box.width)
-      const y = Math.min(Math.max(0, ev.clientY - area.top - dy), area.height - box.height)
-      setPos({ x, y })
-    }
-    const up = () => {
-      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up)
-      setPos(p => { if (p) localStorage.setItem(POS_KEY, JSON.stringify(p)); return p })
-    }
-    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
-  }
-  const reset = () => { localStorage.removeItem(POS_KEY); setPos(null) }
-  return { ref, pos, onGripDown, reset }
 }
 
 function isTyping(target: EventTarget | null) {
@@ -101,7 +74,6 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
   }, [])
 
   const last = [...transcript].reverse().find(line => line.role === 'Tutor')
-  const drag = useDraggable()
   const total = plan?.sessions.length || 0
   const checkpoint = plan?.sessions[checkpointIndex]
   const conceptsById = new Map((plan?.conceptMap || []).map(concept => [concept.id, concept]))
@@ -117,9 +89,9 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
 
   return (
     <>
-      <div ref={drag.ref} className={`lesson-bar ${drag.pos ? 'is-placed' : ''}`} style={drag.pos ? { left: drag.pos.x, top: drag.pos.y } : undefined}>
+      <div className="lesson-bar">
       <div className="lesson-dock" role="toolbar" aria-label="Lesson controls">
-        <span className="bar-grip" title="Drag to move · double-click to reset" aria-hidden="true" onPointerDown={drag.onGripDown} onDoubleClick={drag.reset}>⋮⋮</span>
+        <div className="dock-row dock-main-row">
         {!plan ? (
           <button className="dock-primary" disabled={planBusy} onClick={onBuild}>{planBusy ? 'Planning lesson…' : 'Plan this lesson'}</button>
         ) : (
@@ -127,17 +99,19 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
             <button aria-label="Previous part" disabled={checkpointIndex <= 0} onClick={() => onSelectCheckpoint(checkpointIndex - 1)}>‹</button>
             <span className="dock-step" title={checkpoint?.title}>{checkpointIndex + 1}/{total} · {checkpoint?.title}</span>
             <button aria-label="Next part" disabled={checkpointIndex >= total - 1} onClick={() => onSelectCheckpoint(checkpointIndex + 1)}>›</button>
-            <button aria-expanded={mapOpen} aria-controls="lesson-knowledge-map" onClick={() => { setTextOpen(false); setMapOpen(open => !open) }}>Map</button>
-            <span className="dock-sep" />
-            {status === 'paused' ? <button className="dock-primary" onClick={onResume}>Resume</button>
-              : live ? <button className="dock-primary" onClick={onPause}>Pause</button>
-              : <button className="dock-primary" onClick={onStart}>Start</button>}
-            {(live || status === 'paused') && <button aria-label="Stop" onClick={onStop}>■</button>}
           </>
         )}
+        </div>
+        <div className="dock-row dock-utility-row">
+        {plan && <button aria-expanded={mapOpen} aria-controls="lesson-knowledge-map" onClick={() => { setTextOpen(false); setMapOpen(open => !open) }}>Map</button>}
+        {status === 'paused' && <button className="dock-primary" onClick={onResume}>Resume</button>}
+        {plan && !live && status !== 'paused' && <button className="dock-primary" onClick={onStart}>Start</button>}
+        {live && <button className="dock-primary" onClick={onPause}>Pause</button>}
+        {(live || status === 'paused') && <button aria-label="Stop" onClick={onStop}>■</button>}
         <span className="dock-sep" />
         <button aria-pressed={captions} title="Captions" onClick={() => setCaptions(c => !c)}>CC</button>
         <button aria-expanded={textOpen} aria-controls="lesson-text-chat" onClick={() => { setMapOpen(false); setTextOpen(open => !open) }}>Text</button>
+        </div>
       </div>
 
       {mapOpen && plan && <section id="lesson-knowledge-map" className="lesson-map" aria-label="Lesson knowledge map">

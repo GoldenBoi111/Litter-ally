@@ -166,5 +166,5 @@ export async function createAuth({ dataDir }) {
     return removed
   }
 
-  return { router, requireUser, pruneSessions }
+  return { router, requireUser, currentUser, pruneSessions }
 }

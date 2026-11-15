@@ -16,7 +16,7 @@ const widgetActionSchema = {
     title: { type: 'string', minLength: 1, maxLength: 80 },
     labels: { type: 'array', maxItems: 12, items: shortText },
     series: { type: 'array', maxItems: 4, items: { type: 'object', additionalProperties: false, required: ['name', 'values'], properties: { name: shortText, values: { type: 'array', maxItems: 12, items: { type: 'number' } } } } },
-    rows: { type: 'array', maxItems: 10, items: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 120 } } },
+    rows: { type: 'array', description: 'For a table, use one cell per column label in every row (for example ["California", "Sacramento"] for State and Capital city); do not put pipe-separated cells into one string. For a timeline, use [when, what] pairs.', maxItems: 10, items: { type: 'array', maxItems: 6, items: { type: 'string', maxLength: 120 } } },
     unit: { type: 'string', maxLength: 12 },
   },
 }
@@ -25,13 +25,27 @@ const beatPointSchema = {
   properties: { x: { type: 'number', minimum: 0, maximum: 1200 }, y: { type: 'number', minimum: 0, maximum: 700 } },
 }
 
+// A connector that always says what travels along it: the label is required, so no arrow is left for the learner to guess.
+const arrowActionSchema = {
+  type: 'object', additionalProperties: false,
+  required: ['_type', 'id', 'atMs', 'from', 'to', 'label', 'color', 'bend', 'both'],
+  properties: {
+    _type: { type: 'string', const: 'arrow' }, id: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,47}$' }, atMs: { type: 'integer', minimum: 0, maximum: 12000 },
+    from: beatPointSchema, to: beatPointSchema,
+    label: { type: 'string', minLength: 1, maxLength: 48, description: 'What moves along this arrow, in the learner\'s words: "GET /users request", "200 OK + JSON body", "calls", "returns a token".' },
+    color: { type: 'string', enum: colors },
+    bend: { type: 'number', minimum: -260, maximum: 260, description: 'Curve of the arrow; 0 is straight. Bend a return path so it does not sit on top of the outgoing one.' },
+    both: { type: 'boolean', description: 'True for a two-way relationship. For a request and its response, prefer two labelled arrows instead.' },
+  },
+}
+
 export const diagramPlanSchema = {
   type: 'object',
   additionalProperties: false,
   required: ['actions'],
   properties: {
     actions: {
-      type: 'array', minItems: 4, maxItems: 40,
+      type: 'array', minItems: 5, maxItems: 40,
       items: {
         anyOf: [
           {
@@ -80,12 +94,12 @@ export const teachingBeatSchema = {
     beatId: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,47}$' },
     context: { type: 'string', minLength: 1, maxLength: 300 },
     speech: { type: 'string', minLength: 1, maxLength: 600 },
-    pauseMs: { type: 'integer', minimum: 0, maximum: 8000 },
+    pauseMs: { type: 'integer', minimum: 0, maximum: 5000 },
     waitForLearner: { type: 'boolean' },
     placement: { type: 'string', enum: ['new-section', 'continue', 'revisit'] },
     anchorBeatId: { type: 'string', maxLength: 48 },
     actions: {
-      type: 'array', minItems: 1, maxItems: 12,
+      type: 'array', minItems: 1, maxItems: 16,
       items: {
         anyOf: [
           {
@@ -115,6 +129,7 @@ export const teachingBeatSchema = {
             required: ['_type', 'id', 'atMs', 'targetId', 'dx', 'dy'],
             properties: { _type: { type: 'string', const: 'move' }, id: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,47}$' }, atMs: { type: 'integer', minimum: 0, maximum: 12000 }, targetId: { type: 'string', pattern: '^[a-z][a-z0-9_-]{0,47}$' }, dx: { type: 'number', minimum: -1200, maximum: 1200 }, dy: { type: 'number', minimum: -700, maximum: 700 } },
           },
+          arrowActionSchema,
           widgetActionSchema,
         ],
       },
@@ -138,7 +153,7 @@ export function validateDiagramPlan(value) {
   if (!value || typeof value !== 'object' || !Array.isArray(value.actions)) {
     throw new Error('OpenAI returned an invalid diagram plan.')
   }
-  if (value.actions.length < 4 || value.actions.length > 40) throw new Error('The diagram action count is outside the supported range.')
+  if (value.actions.length < 5 || value.actions.length > 40) throw new Error('The diagram action count is outside the supported range.')
 
   const created = new Set()
   const actionIds = new Set()
@@ -162,7 +177,7 @@ export function validateDiagramPlan(value) {
       created.add(action.id)
     } else if (action._type === 'connect') {
       sawConnection = true
-      if (!validId(action.fromId) || !validId(action.toId) || action.fromId === action.toId || typeof action.label !== 'string' || action.label.length > 40 || !colors.includes(action.color)) {
+      if (!validId(action.fromId) || !validId(action.toId) || action.fromId === action.toId || typeof action.label !== 'string' || !action.label.trim() || action.label.length > 40 || !colors.includes(action.color)) {
         throw new Error('The diagram contains an invalid connection action.')
       }
       if (!created.has(action.fromId) || !created.has(action.toId)) throw new Error('A diagram connection must follow both shapes it connects.')
@@ -186,12 +201,22 @@ export function validateDiagramPlan(value) {
     }
   }
 
-  if (mode === 'nodes' && (created.size < 3 || connections < 1)) throw new Error('A diagram needs at least three shapes and one connection.')
-  if (mode === 'freehand' && value.actions.filter(action => action._type === 'stroke').length < 2) {
-    throw new Error('A freehand diagram needs at least two strokes.')
+  if (mode === 'nodes' && (created.size < 3 || connections < 2)) throw new Error('A diagram needs at least three shapes and two labelled connections.')
+  if (mode === 'freehand' && value.actions.filter(action => action._type === 'stroke').length < 5) {
+    throw new Error('A freehand diagram needs at least five strokes.')
   }
 
   return value
+}
+
+export async function generateValidatedDiagram(generate) {
+  let issue = ''
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const plan = await generate(issue)
+    try { return validateDiagramPlan(plan) }
+    catch (error) { issue = error instanceof Error ? error.message : 'The diagram was invalid.' }
+  }
+  throw new Error(`The diagram could not be made detailed enough: ${issue}`)
 }
 
 const shortString = (value, max) => typeof value === 'string' && value.length <= max
@@ -219,9 +244,9 @@ function validateWidget(action) {
 
 export function validateTeachingBeat(value) {
   if (!value || typeof value !== 'object' || !validBeatId(value.beatId) || typeof value.context !== 'string' || !value.context.trim() || value.context.length > 300 ||
-      typeof value.speech !== 'string' || !value.speech.trim() || value.speech.length > 600 || !Number.isInteger(value.pauseMs) || value.pauseMs < 0 || value.pauseMs > 8000 ||
+      typeof value.speech !== 'string' || !value.speech.trim() || value.speech.length > 600 || !Number.isInteger(value.pauseMs) || value.pauseMs < 0 || value.pauseMs > 5000 ||
       typeof value.waitForLearner !== 'boolean' || !['new-section', 'continue', 'revisit'].includes(value.placement) || typeof value.anchorBeatId !== 'string' || value.anchorBeatId.length > 48 ||
-      !Array.isArray(value.actions) || value.actions.length < 1 || value.actions.length > 12) {
+      !Array.isArray(value.actions) || value.actions.length < 1 || value.actions.length > 16) {
     throw new Error('OpenAI returned an invalid teaching beat.')
   }
 
@@ -239,6 +264,13 @@ export function validateTeachingBeat(value) {
     } else if (action._type === 'text') {
       if (!finiteNumber(action.x) || !finiteNumber(action.y) || action.x < 0 || action.x > 1200 || action.y < 0 || action.y > 700 || typeof action.text !== 'string' || !action.text.trim() || action.text.length > 180 ||
           !colors.includes(action.color) || !textSizes.includes(action.size)) throw new Error('The teaching beat contains invalid editable text.')
+    } else if (action._type === 'arrow') {
+      const point = value => value && finiteNumber(value.x) && finiteNumber(value.y) && value.x >= 0 && value.x <= 1200 && value.y >= 0 && value.y <= 700
+      if (!point(action.from) || !point(action.to) || (action.from.x === action.to.x && action.from.y === action.to.y) ||
+          typeof action.label !== 'string' || !action.label.trim() || action.label.length > 48 ||
+          !colors.includes(action.color) || !finiteNumber(action.bend) || Math.abs(action.bend) > 260 || typeof action.both !== 'boolean') {
+        throw new Error('The teaching beat contains an invalid labelled arrow.')
+      }
     } else if (action._type === 'remove') {
       if (!validBeatId(action.targetId)) throw new Error('The teaching beat contains an invalid revision target.')
     } else if (action._type === 'move') {
