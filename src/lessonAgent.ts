@@ -293,6 +293,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
       const x = xOffset + column * cell.w + 120
       const y = yOffset + row * cell.h + 120
       const point = { x: x + 330, y: y + 180 }
+      editor.centerOnPoint(point, { animation: { duration: 220 } })
       await guideCursor(context.onCursor, cursorPoint, point, context.signal)
       cursorPoint = point
       nodeIndex += 1
@@ -312,6 +313,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
       const from = created.get(action.fromId)
       const to = created.get(action.toId)
       if (!from || !to) continue
+      editor.centerOnPoint(from.point, { animation: { duration: 220 } })
       await guideCursor(context.onCursor, cursorPoint, from.point, context.signal)
       cursorPoint = from.point
       await guideCursor(context.onCursor, cursorPoint, to.point, context.signal)
@@ -629,6 +631,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       if (action.points.length) {
         const start = action.points[Math.max(0, progress - 1)]
         const next = { x: origin.x + start.x, y: origin.y + start.y }
+        editor.centerOnPoint(next, { animation: { duration: 220 } })
         await guideCursor(context.onCursor, cursorPoint, next, context.signal)
         cursorPoint = next
       }
@@ -672,6 +675,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       const reach = { x: target.x - tail.x, y: target.y - tail.y }
       // Never a zero-length shaft: the first frame already has a visible length, and the direction is kept.
       const at = (fraction: number) => { const grown = Math.max(fraction, 1 / steps); return { x: reach.x * grown, y: reach.y * grown } }
+      editor.centerOnPoint(tail, { animation: { duration: 220 } })
       await guideCursor(context.onCursor, cursorPoint, tail, context.signal)
       cursorPoint = tail
       const arrowProps = (fraction: number, labelled: boolean) => ({
@@ -711,6 +715,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       }
       const placed = editor.getShape(id)
       if (placed) corner = { x: placed.x, y: placed.y }
+      editor.centerOnPoint(corner, { animation: { duration: 220 } })
       await guideCursor(context.onCursor, cursorPoint, corner, context.signal)
       cursorPoint = corner
       try {
@@ -738,6 +743,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       } else editor.updateShape({ id, type: 'text', props: { size, scale: 3, font: 'draw', autoSize: true } } as any)
       const placedText = editor.getShape(id)
       const textCursor = () => renderedTextEnd(id, placedText ? { x: placedText.x, y: placedText.y } : textPoint)
+      editor.centerOnPoint(textCursor(), { animation: { duration: 220 } })
       await guideCursor(context.onCursor, cursorPoint, textCursor(), context.signal)
       cursorPoint = textCursor()
       try {
