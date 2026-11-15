@@ -82,7 +82,8 @@
 }
 
 .canvas-area .tlui-layout__bottom__main{position:relative}
-.canvas-area .tlui-menu-zone{position:absolute;top:14px;right:14px}
+.canvas-area .tlui-layout__top__left{position:absolute;top:14px;left:auto;right:14px;width:auto;height:auto;flex:none;align-items:flex-end;z-index:var(--tl-layer-panels)}
+.canvas-area .tlui-menu-zone{position:relative;top:auto;right:auto}
 .canvas-area .tlui-layout__top__right{margin-right:48px}
 
 /* Board pass: red belongs to string, so app chrome writes in ballpoint blue and graphite. */

@@ -72,7 +72,8 @@
   pointer-events: none;
 }
 .board-rail > * { pointer-events: all; flex: 0 0 auto; min-height: 0; }
-.board .tlui-menu-zone { position: absolute; top: 14px; right: 14px; }
+.board .tlui-layout__top__left { position: absolute; top: 14px; left: auto; right: 14px; width: auto; height: auto; flex: none; align-items: flex-end; z-index: var(--tl-layer-panels); }
+.board .tlui-menu-zone { position: relative; top: auto; right: auto; }
 .board-fit, .board-analysis, .board-connections { color: var(--ll-ink); background: var(--ll-paper); border: 1px solid var(--ll-ink-soft); box-shadow: 0 6px 18px rgb(40 36 32 / .14); }
 .board-fit { padding: 8px 12px; border-radius: 6px; cursor: pointer; font: 600 13px var(--font-family-body, system-ui); }
 .board-fit:focus-visible, .board-analysis button:focus-visible, .board-connections summary:focus-visible, .board-restore:focus-visible { outline: 2px solid var(--ll-ink); outline-offset: 2px; }
