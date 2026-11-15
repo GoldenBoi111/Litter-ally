@@ -1,6 +1,7 @@
 import { AssetRecordType, createShapeId, type Editor } from 'tldraw'
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
+import { materialSpot } from './sourceImage'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -39,12 +40,12 @@ export async function placePdfPage(editor: Editor, pdfData: Blob, paperId: strin
         meta: { owner: 'source', paperId, pageNumber },
       }])
     }
-    const x = checkpointIndex * 2400
+    const spot = materialSpot(editor, checkpointIndex, viewport.width, viewport.height)
     editor.createShape({
       id: shapeId,
       type: 'image',
-      x,
-      y: 220,
+      x: spot.x,
+      y: spot.y,
       meta: { owner: 'source', paperId, pageNumber, checkpointId: String(checkpointIndex) },
       props: { assetId, w: viewport.width, h: viewport.height, altText: `Page ${pageNumber} of the imported paper` },
     })
