@@ -140,7 +140,7 @@ function initializePaperCanvas(editor: Editor, paper: ImportedPaper) {
     { type: 'text', x: 0, y: 0, props: { richText: toRichText(paper.title), color: 'black', size: 'l', font: 'serif' } },
   ] as any)
   const bounds = editor.getCurrentPageBounds()
-  if (bounds) editor.zoomToBounds(bounds, { targetZoom: 1, animation: { duration: 0 } })
+  if (bounds) editor.zoomToBounds(bounds, { targetZoom: 0.8, animation: { duration: 0 } })
 }
 
 export default function App({ user, onUserUpdated, onSignOut, notice }: { user: User; onUserUpdated: (user: User) => void; onSignOut: () => void; notice?: string }) {

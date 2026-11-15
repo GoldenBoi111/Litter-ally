@@ -4,6 +4,7 @@ import { validateTeachingBeat } from '../server/agent-actions.mjs'
 import { knowledgeNodeId, readApiJson, type KnowledgeGraph, type LearningEvidence, type KnowledgeProposition, type KnowledgeReasoningChain } from './storage'
 import type { LearningDiagnostic, LearningStatus } from './learning'
 import { getWidgetSize, type WidgetData } from './lessonWidgets'
+import { clearVerticalOverlap } from './lessonPlacement'
 
 export type DiagramBrief = {
   title: string
@@ -333,7 +334,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
 
   if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
   const bounds = editor.getShapesPageBounds(createdIds)
-  if (bounds) editor.zoomToBounds(bounds, { animation: { duration: 350 }, inset: 72 })
+  if (bounds) editor.zoomToBounds(bounds, { animation: { duration: 350 }, inset: 72, targetZoom: 0.8 })
   return createdIds
 }
 
@@ -352,8 +353,24 @@ function beatMarkBounds(beat: Pick<TeachingBeat, 'actions'>) {
       const bend = Math.abs(action.bend)
       return [{ type: 'stroke', x: x - 12 - bend, y: y - 12 - bend, w: Math.abs(action.to.x - action.from.x) + 24 + bend * 2, h: Math.abs(action.to.y - action.from.y) + 24 + bend * 2 }]
     }
+    if (action._type === 'widget') {
+      const { w, h } = getWidgetSize(action, action.w, action.h)
+      return [{ type: 'widget', x: action.x, y: action.y, w, h }]
+    }
     return []
   })
+}
+
+function clearShapeOverlaps(editor: Editor, id: TLShapeId) {
+  const shape = editor.getShape(id)
+  const bounds = shape && editor.getShapePageBounds(shape)
+  if (!shape || !bounds) return
+  const occupied = editor.getCurrentPageShapes().filter(other => other.id !== id).flatMap(other => {
+    const box = editor.getShapePageBounds(other)
+    return box ? [box] : []
+  })
+  const y = clearVerticalOverlap(bounds, occupied)
+  if (y !== bounds.y) editor.updateShape({ id, type: shape.type, y: shape.y + y - bounds.y } as any)
 }
 
 function clearBeatOrigin(editor: Editor, beat: Pick<TeachingBeat, 'actions'>, start: { x: number; y: number }, avoidAgent: boolean) {
@@ -438,7 +455,7 @@ export function conceptRegion(editor: Editor, lessonId: string, checkpointIndex:
 /** Bring a concept's region into view, so a restarted or freshly opened concept starts on visibly blank board. */
 export function focusConceptRegion(editor: Editor, lessonId: string, checkpointIndex: number) {
   const origin = conceptRegion(editor, lessonId, checkpointIndex)
-  editor.zoomToBounds({ x: origin.x, y: origin.y, w: DRAWING_AREA.w, h: DRAWING_AREA.h }, { animation: { duration: 350 }, inset: 48 })
+  editor.zoomToBounds({ x: origin.x, y: origin.y, w: DRAWING_AREA.w, h: DRAWING_AREA.h }, { animation: { duration: 350 }, inset: 48, targetZoom: 0.8 })
   return origin
 }
 
@@ -538,7 +555,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
     const area = { x: origin.x, y: origin.y, w: DRAWING_AREA.w, h: DRAWING_AREA.h }
     const view = editor.getViewportPageBounds()
     const visible = area.x >= view.minX && area.y >= view.minY && area.x + area.w <= view.maxX && area.y + area.h <= view.maxY
-    if (!visible) editor.zoomToBounds(area, { animation: { duration: 300 }, inset: 48 })
+    if (!visible || editor.getZoomLevel() > 0.8) editor.zoomToBounds(visible ? view : area, { animation: { duration: 300 }, inset: visible ? 0 : 48, targetZoom: 0.8 })
   }
 
   // Models tend to bunch cues into the first seconds; spread them over the spoken sentence so ink tracks the voice.
@@ -686,11 +703,16 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       const steps = 10
       const size = getWidgetSize(action, action.w, action.h)
       let progress = Math.max(0, Math.min(steps, Number(existing?.meta?.actionProgress) || 0))
-      const corner = { x: origin.x + action.x, y: origin.y + action.y }
+      let corner = { x: origin.x + action.x, y: origin.y + action.y }
+      const { _type, id: _actionId, atMs: _atMs, x: _x, y: _y, ...props } = action
+      if (!existing) {
+        editor.createShape({ id, type: 'lesson-widget', x: corner.x, y: corner.y, meta: metaFor(action, 'interrupted', 0), props: { ...props, ...size, shown: 0 } } as any)
+        clearShapeOverlaps(editor, id)
+      }
+      const placed = editor.getShape(id)
+      if (placed) corner = { x: placed.x, y: placed.y }
       await guideCursor(context.onCursor, cursorPoint, corner, context.signal)
       cursorPoint = corner
-      const { _type, id: _actionId, atMs: _atMs, x: _x, y: _y, ...props } = action
-      if (!existing) editor.createShape({ id, type: 'lesson-widget', x: corner.x, y: corner.y, meta: metaFor(action, 'interrupted', 0), props: { ...props, ...size, shown: 0 } } as any)
       try {
         while (progress < steps) {
           if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
@@ -710,9 +732,12 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       const textPoint = { x: origin.x + action.x, y: origin.y + action.y }
       const size = action.size === 's' || action.size === 'm' ? 'l' : action.size
       if (!existing) {
-        editor.createShape({ id, type: 'text', x: origin.x + action.x, y: origin.y + action.y, meta: metaFor(action, 'interrupted', 0), props: { richText: toRichText(''), color: action.color, size, scale: 3, font: 'draw', autoSize: true } } as any)
+        editor.createShape({ id, type: 'text', x: textPoint.x, y: textPoint.y, meta: metaFor(action, 'interrupted', 0), props: { richText: toRichText(action.text), color: action.color, size, scale: 3, font: 'draw', autoSize: true } } as any)
+        clearShapeOverlaps(editor, id)
+        editor.updateShape({ id, type: 'text', props: { richText: toRichText('') } } as any)
       } else editor.updateShape({ id, type: 'text', props: { size, scale: 3, font: 'draw', autoSize: true } } as any)
-      const textCursor = () => renderedTextEnd(id, textPoint)
+      const placedText = editor.getShape(id)
+      const textCursor = () => renderedTextEnd(id, placedText ? { x: placedText.x, y: placedText.y } : textPoint)
       await guideCursor(context.onCursor, cursorPoint, textCursor(), context.signal)
       cursorPoint = textCursor()
       try {
