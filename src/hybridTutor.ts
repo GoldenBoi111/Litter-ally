@@ -10,6 +10,7 @@ export type TutorCallbacks = {
   presentTeachingBeat: (beat: TeachingBeat) => Promise<TeachingExecutionState>
   drawDiagram: (diagramIndex: number, request?: string) => Promise<string>
   showSourcePage: (pageNumber: number) => Promise<{ message: string; imageUrl?: string; pageText?: string }>
+  placeOutsideImage: (image: Blob, info: { id: string; title: string; sourceUrl: string; credit: string; license: string; licenseUrl: string }) => Promise<string>
   readSourcePage: (pageNumber: number) => string
   moveCheckpoint: (direction: 'next' | 'previous') => Promise<string>
   /** Erases the agent's board marks for a concept and resets it to its start; returns that concept's brief. */
@@ -819,6 +820,21 @@ export class HybridTutor {
           : `No reputable outside source was found for "${args.term}". Say the material does not define it and give a short plain explanation labeled as general background.`
       } catch (error) {
         output = `The outside lookup failed (${error instanceof Error ? error.message : 'unknown error'}). Say the material does not define it and give a short plain explanation labeled as general background.`
+      }
+    } else if (name === 'find_lesson_image' && typeof args.query === 'string') {
+      this.callbacks.onStatus('connecting', `Finding an illustration for "${args.query}"…`)
+      try {
+        const response = await fetch('/api/background/image', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: args.query }) })
+        await checkApiResponse(response, 'Image search')
+        const { image } = await response.json() as { image: { id: string; title: string; sourceUrl: string; credit: string; license: string; licenseUrl: string; mimeType: string; data: string } | null }
+        if (!image) output = 'No suitable licensed illustration was found. Continue with a drawn visual.'
+        else {
+          const bytes = Uint8Array.from(atob(image.data), char => char.charCodeAt(0))
+          output = await this.callbacks.placeOutsideImage(new Blob([bytes], { type: image.mimeType }), image)
+          context = { type: 'message', role: 'user', content: [{ type: 'input_text', text: `This Wikimedia Commons image is on the canvas. Treat it as outside background, credit ${image.credit} under ${image.license}, and inspect it before describing its details. Source: ${image.sourceUrl}` }, { type: 'input_image', image_url: `data:${image.mimeType};base64,${image.data}` }] }
+        }
+      } catch (error) {
+        output = `Image lookup failed (${error instanceof Error ? error.message : 'unknown error'}). Continue with a drawn visual.`
       }
     } else if (name === 'read_source_segment' && Number.isInteger(args.pageNumber)) {
       output = this.callbacks.readSourcePage(Number(args.pageNumber))
