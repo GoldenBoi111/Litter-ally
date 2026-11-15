@@ -271,7 +271,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
 
   const nodes = plan.actions.filter((action): action is Extract<DiagramAction, { _type: 'create' }> => action._type === 'create')
   const columns = context.diagramKind === 'comparison' ? 2 : ['flow', 'timeline'].includes(context.diagramKind) ? Math.min(4, nodes.length) : Math.min(3, Math.ceil(Math.sqrt(nodes.length)))
-  const cell = { w: 1620, h: 1320 }
+  const cell = { w: 900, h: 600 }
   const { x: xOffset, y: yOffset } = clearBeatOrigin(editor, {
     actions: [{ _type: 'stroke', id: 'area', atMs: 0, points: [{ x: 0, y: 0 }, { x: columns * cell.w, y: Math.ceil(nodes.length / columns) * cell.h }], color: 'black', size: 'm', closed: false }],
   }, boardStart, true)
@@ -289,8 +289,8 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
       const row = Math.floor(nodeIndex / columns)
       const offsetColumn = nodeIndex % columns
       const column = ['flow', 'timeline'].includes(context.diagramKind) && row % 2 ? columns - 1 - offsetColumn : offsetColumn
-      const x = xOffset + column * cell.w + 480
-      const y = yOffset + row * cell.h + 480
+      const x = xOffset + column * cell.w + 120
+      const y = yOffset + row * cell.h + 120
       const point = { x: x + 330, y: y + 180 }
       await guideCursor(context.onCursor, cursorPoint, point, context.signal)
       cursorPoint = point
@@ -462,7 +462,7 @@ function beatOrigin(editor: Editor, beat: TeachingBeat, lessonId: string, checkp
   if (beat.placement === 'continue') {
     const latest = [...shapes].reverse().find(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number')
     const origin = latest ? { x: latest.meta.originX as number, y: latest.meta.originY as number } : null
-    if (origin && !areaIsFull(editor, shapes, origin)) return clearBeatOrigin(editor, beat, origin, false)
+    if (origin && !areaIsFull(editor, shapes, origin)) return clearBeatOrigin(editor, beat, origin, true)
   }
   // A new idea in a concept already under way stacks below that concept's work; a concept with nothing on the
   // board yet starts in a region that is clear of every other mark, so finished concepts are never drawn over.
