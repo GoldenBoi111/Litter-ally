@@ -182,6 +182,12 @@ const ACTION_DELAY_MS = 90
 export const BEAT_PACE = 1.6
 /** Local coordinate space the model draws in for each beat (matches the server prompt). */
 const DRAWING_AREA = { w: 1200, h: 700 }
+/** Each concept gets its own 2400-pixel column: source material on the left, the tutor's region beside it. */
+const CONCEPT_COLUMN = 2400
+const TUTOR_COLUMN_OFFSET = 1100
+const CONCEPT_TOP = 220
+/** Clear space kept around a concept's drawing region, so a finished concept never bleeds into the next one. */
+const REGION_MARGIN = 48
 /** Rough speaking rate of the tutor voice, used to spread a beat's ink across its narration. */
 const SPOKEN_MS_PER_WORD = 330
 export const DIAGRAM_PACE = 1.8
