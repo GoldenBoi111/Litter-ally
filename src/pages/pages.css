@@ -187,7 +187,7 @@
 }
 .lesson-captions p {
   display: inline; margin: 0; padding: 6px 12px; line-height: 2.1; box-decoration-break: clone; -webkit-box-decoration-break: clone;
-  font: 500 16px var(--font-family-body); color: #fffdf9; background: rgb(28 25 23 / .78); border-radius: 6px;
+  font: 500 16px/1.75 var(--font-family-body); color: #fffdf9; background: rgb(28 25 23 / .78); border-radius: 6px;
 }
 .lesson-captions { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 2; }
 .lesson-captions .lesson-captions-detail { font-size: 14px; background: rgb(28 25 23 / .6); }
