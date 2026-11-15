@@ -137,6 +137,7 @@ type StoredPaper = Omit<ImportedPaper, keyof BinaryParts> & { rev?: number; blob
 // Binary parts stay in memory after loading so record-only server writes can hand callers back a complete paper.
 const binaries = new Map<string, BinaryParts>()
 const uploaded = new WeakSet<Blob>()
+const binaryLoads = new Map<string, Promise<void>>()
 
 function splitBinary(paper: ImportedPaper) {
   const { pdfData, sourceData, sourceFrames, ...record } = paper
@@ -159,18 +160,25 @@ function withBinary(stored: StoredPaper): ImportedPaper {
 }
 
 async function loadBinary(stored: StoredPaper) {
-  const fetchBlob = async (name: string) => {
-    const response = await checkApiResponse(fetch(`${LIBRARY}/papers/${stored.id}/blobs/${name}`, { credentials: 'same-origin' }), `Could not load a file for "${stored.title}"`)
-    const blob = await response.blob()
-    uploaded.add(blob)
-    return blob
-  }
-  const types = stored.blobTypes || {}
-  const parts: BinaryParts = {}
-  if (types.pdfData) parts.pdfData = await fetchBlob('pdfData')
-  if (types.sourceData) parts.sourceData = await fetchBlob('sourceData')
-  if (stored.sourceFrames?.length) parts.sourceFrames = await Promise.all(stored.sourceFrames.map(async (frame, index) => ({ timeSeconds: frame.timeSeconds, data: await fetchBlob(`frame-${index}`) })))
-  binaries.set(stored.id, parts)
+  if (binaries.has(stored.id)) return
+  const pending = binaryLoads.get(stored.id)
+  if (pending) return pending
+  const loading = (async () => {
+    const fetchBlob = async (name: string) => {
+      const response = await checkApiResponse(fetch(`${LIBRARY}/papers/${stored.id}/blobs/${name}`, { credentials: 'same-origin' }), `Could not load a file for "${stored.title}"`)
+      const blob = await response.blob()
+      uploaded.add(blob)
+      return blob
+    }
+    const types = stored.blobTypes || {}
+    const parts: BinaryParts = {}
+    if (types.pdfData) parts.pdfData = await fetchBlob('pdfData')
+    if (types.sourceData) parts.sourceData = await fetchBlob('sourceData')
+    if (stored.sourceFrames?.length) parts.sourceFrames = await Promise.all(stored.sourceFrames.map(async (frame, index) => ({ timeSeconds: frame.timeSeconds, data: await fetchBlob(`frame-${index}`) })))
+    binaries.set(stored.id, parts)
+  })()
+  binaryLoads.set(stored.id, loading)
+  try { await loading } finally { binaryLoads.delete(stored.id) }
 }
 
 export async function deletePaperCanvas(paperId: string, _onBlocked?: () => void): Promise<void> {
@@ -188,6 +196,12 @@ export async function saveCanvas(key: string, snapshot: unknown): Promise<void> 
 type KnowledgeDoc = { rev: number; graph: KnowledgeGraph; learner: LearningProfile }
 const loadKnowledge = () => api<KnowledgeDoc>(`${LIBRARY}/knowledge`)
 const loadStoredPapers = async () => (await api<{ papers: StoredPaper[] }>(`${LIBRARY}/papers`)).papers
+
+export async function loadPaperBinary(paperId: string): Promise<ImportedPaper> {
+  const { paper } = await api<{ paper: StoredPaper }>(`${LIBRARY}/papers/${paperId}`)
+  await loadBinary(paper)
+  return withBinary(paper)
+}
 
 export async function loadKnowledgeGraph(): Promise<KnowledgeGraph> {
   return (await loadKnowledge()).graph || EMPTY_GRAPH
@@ -318,14 +332,31 @@ export function mergeTaughtKnowledge(graph: KnowledgeGraph, update: ExtractedKno
   return { ...graph, propositions: [...propositions.values()], chains: [...chains.values()] }
 }
 
-export async function listPapers(): Promise<ImportedPaper[]> {
+export function relevantKnowledge(graph: KnowledgeGraph, sourceIds: string[]) {
+  const sources = new Set(sourceIds)
+  const propositions = graph.propositions || []
+  const relevant = new Set(propositions.filter(item => item.sources.some(source => sources.has(source.sourceId || '') || sources.has(source.paperId))).map(item => item.id))
+  const reasoningLinks = (graph.reasoningLinks || []).filter(link => relevant.has(link.source) || relevant.has(link.target)).slice(0, 80)
+  for (const link of reasoningLinks) { relevant.add(link.source); relevant.add(link.target) }
+  const chains = (graph.chains || []).filter(chain => [chain.conclusion, ...chain.premises].some(id => relevant.has(id))).slice(0, 40)
+  for (const chain of chains) { relevant.add(chain.conclusion); chain.premises.forEach(id => relevant.add(id)) }
+  return {
+    propositions: propositions.filter(item => relevant.has(item.id)).slice(0, 40).map(({ id, concept, statement }) => ({ id, concept, statement })),
+    reasoningLinks: reasoningLinks.map(({ source, target, relationType, reason }) => ({ source, target, relationType, reason })),
+    chains: chains.map(({ id, premises, conclusion, reason }) => ({ id, premises, conclusion, reason })),
+  }
+}
+
+export async function listPapers(onMetadata?: (papers: ImportedPaper[]) => void): Promise<ImportedPaper[]> {
   const stored = await loadStoredPapers()
-  await Promise.all(stored.map(loadBinary))
-  return stored.map(withBinary).map(paper => {
+  const papers = stored.map(withBinary).map(paper => {
     if (paper.sourceKind && paper.sourceSegments?.length) return paper
     const source = toLearningSource(paper)
     return { ...paper, sourceKind: source.kind, sourceSegments: source.segments }
   }).sort((a, b) => b.importedAt.localeCompare(a.importedAt))
+  onMetadata?.(papers)
+  await Promise.all(stored.map(loadBinary))
+  return papers.map(paper => ({ ...paper, ...binaries.get(paper.id) }))
 }
 
 export async function savePaper(paper: ImportedPaper): Promise<void> {
