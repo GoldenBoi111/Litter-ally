@@ -11,13 +11,16 @@ const storageMock = `data:text/javascript,${encodeURIComponent("export const kno
 const tldrawMock = `data:text/javascript,${encodeURIComponent("export const createShapeId = value => `shape:${value}`; export const toRichText = value => value")}`
 const schemaMock = `data:text/javascript,${encodeURIComponent("export const compressLegacySegments = value => value")}`
 const widgetsMock = `data:text/javascript,${encodeURIComponent("export const getWidgetSize = (action, w, h) => ({ w, h })")}`
+const placementMock = `data:text/javascript;base64,${Buffer.from((await transformWithOxc(readFileSync(new URL('../src/lessonPlacement.ts', import.meta.url), 'utf8'), 'src/lessonPlacement.ts')).code).toString('base64')}`
 compiled = compiled
   .replace(/from ["']tldraw["']/, `from ${JSON.stringify(tldrawMock)}`)
   .replace(/from ["']@tldraw\/tlschema["']/, `from ${JSON.stringify(schemaMock)}`)
   .replace(/from ["']\.\.\/server\/agent-actions\.mjs["']/, `from ${JSON.stringify(new URL('./agent-actions.mjs', import.meta.url).href)}`)
   .replace(/from ["']\.\/storage["']/, `from ${JSON.stringify(storageMock)}`)
   .replace(/from ["']\.\/lessonWidgets["']/, `from ${JSON.stringify(widgetsMock)}`)
+  .replace(/from ["']\.\/lessonPlacement["']/, `from ${JSON.stringify(placementMock)}`)
 const { applyDiagramPlan, applyTeachingBeat, clearConceptMarks, conceptRegion, getSelectionContext, getSelectionImage, getWhiteboardContext } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+globalThis.requestAnimationFrame ??= callback => setTimeout(callback, 0)
 
 test('installed tldraw schema accepts the native compressed pen segments', () => {
   const segments = compressLegacySegments([{ type: 'free', points: [{ x: 0, y: 0, z: 0.5 }, { x: 20, y: 10, z: 0.5 }] }])
@@ -40,6 +43,9 @@ function fakeEditor(initial = []) {
     deleteShapes: ids => ids.forEach(id => shapes.delete(typeof id === 'string' ? id : id.id)),
     getShapesPageBounds: ids => ids.length ? { x: 0, y: 0, w: 400, h: 200 } : null,
     zoomToBounds: bounds => { zooms.push(bounds) },
+    centerOnPoint: () => undefined,
+    getZoomLevel: () => 0.8,
+    createBinding: () => undefined,
     zooms,
     getViewportPageBounds: () => ({ minX: 0, minY: 0, maxX: 1600, maxY: 900 }),
     getSelectionPageBounds: () => null,
@@ -293,4 +299,54 @@ test('arrows attach only to the nearby preceding label and keep their planned ta
   assert.equal(near.x + near.props.end.x, origin.x + 500)
   assert.equal(far.x, origin.x + 800)
   assert.equal(far.x + far.props.end.x, origin.x + 500)
+})
+
+test('an arrow starts at a label after collision avoidance moves that label', async () => {
+  const editor = fakeEditor()
+  await applyTeachingBeat(editor, {
+    beatId: 'shifted_label', context: 'Connect labels.', speech: 'The second label sends a signal.',
+    pauseMs: 0, waitForLearner: false, placement: 'new-section', anchorBeatId: '',
+    actions: [
+      { _type: 'text', id: 'first', atMs: 0, x: 20, y: 20, text: 'first', color: 'black', size: 'l' },
+      { _type: 'text', id: 'second', atMs: 0, x: 20, y: 20, text: 'second', color: 'black', size: 'l' },
+      { _type: 'arrow', id: 'link', atMs: 0, from: { x: 20, y: 20 }, to: { x: 500, y: 20 }, label: 'signal', color: 'blue', bend: 0, both: false },
+    ],
+  }, { lessonId: 'paper', checkpointIndex: 0, signal: new AbortController().signal })
+  const first = editor.getShape('shape:lesson-paper-0-shifted_label-first')
+  const second = editor.getShape('shape:lesson-paper-0-shifted_label-second')
+  const arrow = editor.getShape('shape:lesson-paper-0-shifted_label-link')
+  assert.ok(second.y > first.y)
+  assert.equal(arrow.x, second.x + editor.getShapePageBounds(second).w)
+  assert.equal(arrow.y, second.y + editor.getShapePageBounds(second).h / 2)
+})
+
+test('an arrow target follows a label moved clear of another label', async () => {
+  const editor = fakeEditor()
+  await applyTeachingBeat(editor, {
+    beatId: 'shifted_target', context: 'Connect labels.', speech: 'The signal reaches the lower label.',
+    pauseMs: 0, waitForLearner: false, placement: 'new-section', anchorBeatId: '',
+    actions: [
+      { _type: 'text', id: 'first', atMs: 0, x: 400, y: 20, text: 'first', color: 'black', size: 'l' },
+      { _type: 'text', id: 'second', atMs: 0, x: 400, y: 20, text: 'second', color: 'black', size: 'l' },
+      { _type: 'arrow', id: 'link', atMs: 0, from: { x: 20, y: 20 }, to: { x: 400, y: 20 }, label: 'signal', color: 'blue', bend: 0, both: false },
+    ],
+  }, { lessonId: 'paper', checkpointIndex: 0, signal: new AbortController().signal })
+  const second = editor.getShape('shape:lesson-paper-0-shifted_target-second')
+  const arrow = editor.getShape('shape:lesson-paper-0-shifted_target-link')
+  assert.equal(arrow.y + arrow.props.end.y, second.y)
+})
+
+test('diagram connectors start between their nodes rather than at the canvas origin', async () => {
+  const editor = fakeEditor()
+  const actions = [
+    { _type: 'create', id: 'one', shape: 'rectangle', text: 'one', color: 'blue' },
+    { _type: 'create', id: 'two', shape: 'rectangle', text: 'two', color: 'blue' },
+    { _type: 'create', id: 'three', shape: 'rectangle', text: 'three', color: 'blue' },
+    { _type: 'connect', id: 'one_two', fromId: 'one', toId: 'two', label: 'flows', color: 'blue' },
+  ]
+  await applyDiagramPlan(editor, { actions }, { lessonId: 'paper', checkpointIndex: 0, diagramIndex: 0, diagramKind: 'flow', signal: new AbortController().signal })
+  const arrow = [...editor.shapes.values()].find(shape => shape.type === 'arrow')
+  assert.ok(arrow.x > 1000)
+  assert.equal(arrow.props.end.x, 900)
+  assert.equal(arrow.props.end.y, 0)
 })

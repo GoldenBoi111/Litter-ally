@@ -319,8 +319,8 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
       await guideCursor(context.onCursor, cursorPoint, to.point, context.signal)
       cursorPoint = to.point
       editor.createShape({
-        id, type: 'arrow', x: 0, y: 0, meta,
-        props: { kind: 'elbow', start: { x: 0, y: 0 }, end: { x: 80, y: 80 }, color: action.color, size: 'm', scale: 1, richText: toRichText(action.label), arrowheadEnd: 'arrow' },
+        id, type: 'arrow', x: from.point.x, y: from.point.y, meta,
+        props: { kind: 'elbow', start: { x: 0, y: 0 }, end: { x: to.point.x - from.point.x, y: to.point.y - from.point.y }, color: action.color, size: 'm', scale: 1, richText: toRichText(action.label), arrowheadEnd: 'arrow' },
       } as any)
       for (const [terminal, target] of [['start', from.id], ['end', to.id]] as const) {
         editor.createBinding({
@@ -533,6 +533,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
   const completedIds: TLShapeId[] = []
   let cursorPoint: AgentCursorPoint | null = null
   let previousTextId: TLShapeId | null = null
+  let previousTextPlanned: AgentCursorPoint | null = null
   const renderedTextEnd = (shapeId: TLShapeId, fallback: AgentCursorPoint) => {
     const text = editor.getContainer().querySelector<HTMLElement>(`[data-shape-id="${shapeId}"] .tl-rich-text`)
     if (text?.textContent) {
@@ -545,6 +546,22 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
     const shape = editor.getShape(shapeId)
     const bounds = shape && editor.getShapePageBounds(shape)
     return bounds ? { x: bounds.x + bounds.w, y: bounds.y + bounds.h / 2 } : fallback
+  }
+  const relocatedTextPoint = (point: AgentCursorPoint) => {
+    let closest = Infinity
+    let result = point
+    for (const entry of [...beat.actions].reverse()) {
+      if (entry._type !== 'text') continue
+      const shape = editor.getShape(createShapeId(`lesson-${context.lessonId}-${context.checkpointIndex}-${beat.beatId}-${entry.id}`))
+      const bounds = shape && editor.getShapePageBounds(shape)
+      if (!bounds) continue
+      const planned = { x: origin.x + entry.x, y: origin.y + entry.y }
+      const distance = Math.min(Math.abs(point.x - planned.x), Math.abs(point.x - planned.x - bounds.w))
+      if (distance > 48 || point.y < planned.y - 48 || point.y > planned.y + bounds.h + 48 || distance >= closest) continue
+      closest = distance
+      result = { x: point.x + bounds.x - planned.x, y: point.y + bounds.y - planned.y }
+    }
+    return result
   }
   const metaFor = (action: TeachingAction, state: 'interrupted' | 'complete', progress: number) => ({
     owner: 'agent', lessonId: context.lessonId, checkpointId: String(context.checkpointIndex), beatId: beat.beatId,
@@ -622,8 +639,13 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
 
     const id = createShapeId(`lesson-${context.lessonId}-${context.checkpointIndex}-${beat.beatId}-${action.id}`)
     const existing = editor.getShape(id)
-    if (action._type === 'text') previousTextId = id
-    else if (action._type !== 'arrow') previousTextId = null
+    if (action._type === 'text') {
+      previousTextId = id
+      previousTextPlanned = { x: origin.x + action.x, y: origin.y + action.y }
+    } else if (action._type !== 'arrow') {
+      previousTextId = null
+      previousTextPlanned = null
+    }
     if (existing?.meta?.actionState === 'complete') { completedIds.push(id); continue }
 
     if (action._type === 'stroke') {
@@ -665,13 +687,15 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       const steps = 12
       let progress = Math.max(0, Math.min(steps, Number(existing?.meta?.actionProgress) || 0))
       const modelTail = { x: origin.x + action.from.x, y: origin.y + action.from.y }
-      const target = { x: origin.x + action.to.x, y: origin.y + action.to.y }
+      const target = relocatedTextPoint({ x: origin.x + action.to.x, y: origin.y + action.to.y })
       const previousText = previousTextId && editor.getShape(previousTextId)
       const textBounds = previousText && editor.getShapePageBounds(previousText)
-      const tail = textBounds && modelTail.x >= textBounds.x - 48 && modelTail.x <= textBounds.x + textBounds.w + 48 &&
-        modelTail.y >= textBounds.y - 48 && modelTail.y <= textBounds.y + textBounds.h + 48
+      const tail = textBounds && previousTextPlanned &&
+        modelTail.x >= previousTextPlanned.x - 48 && modelTail.x <= previousTextPlanned.x + textBounds.w + 48 &&
+        modelTail.y >= previousTextPlanned.y - 48 && modelTail.y <= previousTextPlanned.y + textBounds.h + 48
         ? renderedTextEnd(previousTextId!, modelTail) : modelTail
       previousTextId = null
+      previousTextPlanned = null
       const reach = { x: target.x - tail.x, y: target.y - tail.y }
       // Never a zero-length shaft: the first frame already has a visible length, and the direction is kept.
       const at = (fraction: number) => { const grown = Math.max(fraction, 1 / steps); return { x: reach.x * grown, y: reach.y * grown } }
