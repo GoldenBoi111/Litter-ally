@@ -45,7 +45,7 @@ Sources saved in the browser before accounts existed move into the first empty a
 
 ## Import and explore
 
-- Import PDFs, plain text, Markdown, CSV, code files, PowerPoint slides, Excel workbooks, images, audio, video, or public HTTPS web pages. arXiv abstract and PDF links are supported.
+- Import PDFs, plain text, Markdown, CSV, code files, Word documents, PowerPoint slides, Excel workbooks, images, audio, video, or public HTTPS web pages. arXiv abstract and PDF links are supported.
 - Text, code, CSV, and web pages are split into bounded, source-addressable segments. Images use local OCR. Audio/video are transcribed with local Whisper; video also retains sampled frames. PPTX and XLSX text is parsed locally by the app server; formulas and macros are never executed.
 - Each source is stored separately in the local library. Select one source and optionally include others for a combined lesson, then set a goal, answer the short diagnostic, and follow the dependency-ordered checkpoints. Combined lessons keep each citation linked to its original source segment. A weak answer triggers a repair and revises the remaining route; clear answers keep the route.
 - Answer reviews and retrieval-practice attempts are kept in a separate, dated learner profile. The knowledge graph stores source-grounded propositions and reasoning chains; it does not store learner mastery as a graph fact.
