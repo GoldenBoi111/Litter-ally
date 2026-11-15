@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Confetti from 'react-confetti'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs'
@@ -204,6 +205,8 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
   const [projectsLoaded, setProjectsLoaded] = useState(false)
   const startGuidedLesson = (extra: string[], goal: string) => {
     setSelectedSourceIds(extra)
+    completionCelebratedRef.current = false
+    setLessonComplete(false)
     planRef.current = null
     setPlan(null)
     checkpointIndexRef.current = 0
@@ -215,6 +218,8 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     setPendingGoal({ goal, extra })
   }
   const enterLesson = (primary: string, extra: string[], goal: string | null) => {
+    completionCelebratedRef.current = false
+    setLessonComplete(false)
     setReturnView(view === 'lesson' ? returnView : view)
     navigate('lesson', activeProjectId, primary)
     if (!goal) { setCurrentId(primary); return }
@@ -271,6 +276,14 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
   const diagnosticResultRef = useRef<{ paperId: string; summary: string } | null>(null)
   const lastLearnerLineRef = useRef('')
   const [plan, setPlan] = useState<TeachingPlan | null>(null)
+  const [lessonComplete, setLessonComplete] = useState(false)
+  const completionCelebratedRef = useRef(false)
+  const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight })
+  useEffect(() => {
+    const updateWindowSize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight })
+    window.addEventListener('resize', updateWindowSize)
+    return () => window.removeEventListener('resize', updateWindowSize)
+  }, [])
   const [checkpointIndex, setCheckpointIndex] = useState(0)
   const [tutorStatus, setTutorStatus] = useState<TutorStatus>('idle')
   const [tutorMicMuted, setTutorMicMuted] = useState(true)
@@ -721,6 +734,10 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     const delta = direction === 'next' ? 1 : -1
     const next = Math.max(0, Math.min(activePlan.sessions.length - 1, checkpointIndexRef.current + delta))
     const finalCheckpoint = direction === 'next' && next === checkpointIndexRef.current && checkpointIndexRef.current === activePlan.sessions.length - 1
+    if (finalCheckpoint && !completionCelebratedRef.current) {
+      completionCelebratedRef.current = true
+      setLessonComplete(true)
+    } else if (direction === 'previous') setLessonComplete(false)
     if (direction === 'next' && currentPaper && (next > checkpointIndexRef.current || finalCheckpoint)) {
       try { await persistTaughtCheckpoint(currentPaper, activePlan, checkpointIndexRef.current) }
       catch (reason) { setError(`Could not save this checkpoint's source knowledge: ${errorMessage(reason)}`) }
@@ -747,6 +764,8 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
       if (erase.length) editor.deleteShapes(erase.map(shape => shape.id))
     }
     if (index !== checkpointIndexRef.current) {
+      completionCelebratedRef.current = false
+      setLessonComplete(false)
       checkpointIndexRef.current = index
       setCheckpointIndex(index)
       await persistLessonState(activePlan, index)
@@ -760,6 +779,8 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     const activePlan = planRef.current
     if (!activePlan) return
     const next = Math.max(0, Math.min(activePlan.sessions.length - 1, index))
+    completionCelebratedRef.current = false
+    setLessonComplete(false)
     drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
     checkpointIndexRef.current = next
     checkpointTranscriptStartRef.current = transcriptRef.current.length
@@ -1020,6 +1041,8 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
 
   const storeTeachingPlan = useCallback(async (paper: ImportedPaper, nextPlan: TeachingPlan) => {
     if (currentId !== paper.id) return
+    completionCelebratedRef.current = false
+    setLessonComplete(false)
     const { paper: updatedPaper, graph } = await saveLearningPlan(
       paper, nextPlan, graph => recordPlanKnowledge(graph, nextPlan, paper.id, paper.title, paper.sourceSegments), true, 0, [paper.id, ...selectedSourceIds.filter(id => id !== paper.id)],
     )
@@ -1159,6 +1182,8 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     setKnowledgeGraph(graph)
     setPapers(items => items.map(item => item.id === updated.id ? updated : item))
     planRef.current = nextPlan
+    completionCelebratedRef.current = false
+    setLessonComplete(false)
     setPlan(nextPlan)
     if (nextIndex !== index) checkpointTranscriptStartRef.current = transcriptRef.current.length
     checkpointIndexRef.current = nextIndex
@@ -1325,6 +1350,14 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
               onBuild={() => void generateTeachingPlan()} onAsk={question => askTutor(question)} onStart={() => void startTutor()} onPause={pauseTutor} onResume={resumeTutor} onStop={stopTutor}
               onSelectCheckpoint={selectCheckpoint} onTalkStart={startTutorPushToTalk} onTalkEnd={endTutorPushToTalk}
             />}
+            {lessonComplete && <div className="lesson-completion" role="status" aria-live="polite">
+              <Confetti width={windowSize.width} height={windowSize.height} numberOfPieces={220} recycle={false} colors={['#f8dc4c', '#2c4f9e', '#f8f5ee', '#e7a04c', '#78a66a']} />
+              <section className="lesson-completion-card">
+                <strong>You're done!</strong>
+                <span>Do you have any questions?</span>
+                <button onClick={() => setLessonComplete(false)}>Close</button>
+              </section>
+            </div>}
           </div>
           </>}
         </section>

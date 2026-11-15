@@ -144,6 +144,12 @@
 .dock-step { font: 13px var(--font-family-body); max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
 .dock-sep { width: 1px; height: 20px; background: rgb(0 0 0 / .15); margin: 0 4px; }
 
+.lesson-completion { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; pointer-events: none; }
+.lesson-completion canvas { position: fixed !important; inset: 0; pointer-events: none; }
+.lesson-completion-card { display: grid; gap: 10px; justify-items: center; padding: 24px 32px; background: var(--ll-paper, #f8f5ee); border: 2px solid var(--ll-ink, #2a2420); border-radius: 16px 7px 14px 6px; box-shadow: 0 12px 40px rgb(0 0 0 / .22); color: var(--ll-ink, #2a2420); font: 18px var(--font-family-body); pointer-events: auto; }
+.lesson-completion-card strong { font: 700 30px var(--font-script); }
+.lesson-completion-card button { border: 0; border-radius: 8px; padding: 8px 16px; background: var(--desk-indigo, #2c4f9e); color: #fffdf9; font: 600 14px var(--font-family-body); cursor: pointer; }
+
 /* Hold-Space-to-talk: the headline interaction. Sits above tldraw's toolbar on the right. */
 .talk-pill {
   display: flex; align-items: center; gap: 12px; padding: 10px 18px 10px 10px;
