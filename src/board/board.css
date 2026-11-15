@@ -43,10 +43,10 @@
 
 /* Floating actions: a slip of paper above the canvas, appears instantly (it follows every selection). */
 .board-actions {
-  /* Centred in the space left of the rail: left/right reserve the rail's column, so the two cannot meet. */
-  position: absolute; top: 14px; left: 14px; right: calc(var(--board-rail-w, 320px) + 28px); z-index: 310;
-  width: fit-content; max-width: 100%; margin-inline: auto;
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 5px;
+  /* Align contextual actions beside the right-side board rail without colliding with its menu. */
+  position: absolute; top: 14px; right: calc(var(--board-rail-w, 320px) + 14px); z-index: 310;
+  width: fit-content; max-width: calc(100% - var(--board-rail-w, 320px) - 28px);
+  display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; padding: 5px;
   background: var(--ll-paper); border-radius: 6px;
   box-shadow: 0 1px 0 rgb(40 36 32 / 0.08), 0 6px 18px rgb(40 36 32 / 0.14);
   pointer-events: all;
@@ -66,13 +66,13 @@
    disappearing (fit, analysis, connections) always stack instead of landing on each other. */
 .board { --board-rail-w: 320px; }
 .board-rail {
-  position: absolute; top: 14px; right: 14px; z-index: 300;
+  position: absolute; top: 60px; right: 14px; z-index: 300;
   display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
-  width: var(--board-rail-w); max-width: calc(100% - 28px); max-height: calc(100% - 28px);
+  width: var(--board-rail-w); max-width: calc(100% - 28px); max-height: calc(100% - 74px);
   pointer-events: none;
 }
 .board-rail > * { pointer-events: all; flex: 0 0 auto; min-height: 0; }
-.board .tlui-menu-zone { position: absolute; top: 14px; right: calc(var(--board-rail-w, 320px) + 14px); }
+.board .tlui-menu-zone { position: absolute; top: 14px; right: 14px; }
 .board-fit, .board-analysis, .board-connections { color: var(--ll-ink); background: var(--ll-paper); border: 1px solid var(--ll-ink-soft); box-shadow: 0 6px 18px rgb(40 36 32 / .14); }
 .board-fit { padding: 8px 12px; border-radius: 6px; cursor: pointer; font: 600 13px var(--font-family-body, system-ui); }
 .board-fit:focus-visible, .board-analysis button:focus-visible, .board-connections summary:focus-visible, .board-restore:focus-visible { outline: 2px solid var(--ll-ink); outline-offset: 2px; }
