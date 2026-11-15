@@ -4,15 +4,15 @@ import { Input } from './components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs'
 import { DefaultStylePanel, toRichText, useEditor, useValue, type Editor, type TLUiStylePanelProps } from 'tldraw'
 import 'tldraw/tldraw.css'
-import { latestConceptEvidence, listPapers, loadKnowledgeGraph, loadLearningProfile, paperCanvasPersistenceKey, readApiJson, recordPlanKnowledge, saveLearningPlan, savePaper, type ImportedPaper, type LearningEvidence } from './storage'
+import { latestConceptEvidence, listPapers, loadKnowledgeGraph, loadLearningProfile, mergeTaughtKnowledge, paperCanvasPersistenceKey, readApiJson, recordPlanKnowledge, relevantKnowledge, saveLearningOutcome, saveLearningPlan, savePaper, type ImportedPaper, type LearningEvidence } from './storage'
 import { readPaperEvidence, readPaperPage } from './paper-text.mjs'
 import { applyDiagramPlan, applyTeachingBeat, buildCheckpointBrief, formatCheckpointBrief, getSelectionContext, getTeachingExecutionState, getWhiteboardContext, requestDiagramPlan, type DiagramBrief, type TeachingBeat, type TeachingPlan } from './lessonAgent'
-import { mergeCourseJob, readCourseJob, requestAdaptivePlan, requestAdaptiveRevision, requestDiagnosticTurn, requestFastPlan, shareDiagnosticWithPlanner, defaultLearningGoal, type DiagnosticTurn } from './learning'
+import { extractTaughtKnowledge, mergeCourseJob, readCourseJob, requestAdaptivePlan, requestAdaptiveRevision, requestDiagnosticTurn, requestFastPlan, shareDiagnosticWithPlanner, defaultLearningGoal, type DiagnosticTurn } from './learning'
 import { AIMD, languageGuide, nextLevel, readLearnerSignal, type AimdSignal } from './aimd'
 import { DiagnosticChat } from './DiagnosticChat'
 import { finishPdfExtraction, type PdfExtraction } from './pdfImport'
 import { importImageSource, importMediaSource, importTextSource } from './sourceImport'
-import { placeSourceImage } from './sourceImage'
+import { placeOutsideImage, placeSourceImage } from './sourceImage'
 import { LessonDock } from './LessonDock'
 import { PaperLoader } from './PaperLoader'
 import { Board } from './board/Board'
@@ -22,7 +22,7 @@ import './pages/pages.css'
 import { microphoneErrorMessage } from './micAccess'
 import { COMPARE_GOAL, DEEP_GOAL, loadProjects, newProject, projectBoardKey, projectSynthesisKey, saveProjects, summarizeSource, synthesizeProject, type Project, isCurrentSummary } from './projects'
 import { PersistentTldraw } from './persistentCanvas'
-import { lessonShapeUtils } from './lessonWidgets'
+import { lessonShapeUtils, type WidgetData } from './lessonWidgets'
 import { Wordmark } from './Logo'
 import { AccountSettings } from './AccountSettings'
 import type { User } from './AuthGate'
@@ -94,7 +94,7 @@ function IntakePanel({ busy, progress, error, onFiles, onUrl, onTopic }: IntakeP
       </Tabs>
       {mode === 'file' ? (
         <div className={`drop-zone ${dragging ? 'dragging' : ''}`} onDragEnter={event => { event.preventDefault(); setDragging(true) }} onDragOver={event => event.preventDefault()} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false) }} onDrop={event => { event.preventDefault(); setDragging(false); onFiles(Array.from(event.dataTransfer.files)) }}>
-          <input ref={inputRef} className="file-input" type="file" accept=".pdf,.txt,.md,.markdown,.csv,.pptx,.xlsx,.ts,.tsx,.js,.jsx,.mjs,.py,.java,.go,.rs,.c,.h,.cpp,.cs,.rb,.php,.sh,.sql,.json,.yaml,.yml,.toml,.xml,image/*,audio/*,video/*" multiple aria-label="Choose learning material files" onChange={event => { if (event.currentTarget.files) onFiles(Array.from(event.currentTarget.files)); event.currentTarget.value = '' }} />
+          <input ref={inputRef} className="file-input" type="file" accept=".pdf,.txt,.md,.markdown,.csv,.docx,.pptx,.xlsx,.ts,.tsx,.js,.jsx,.mjs,.py,.java,.go,.rs,.c,.h,.cpp,.cs,.rb,.php,.sh,.sql,.json,.yaml,.yml,.toml,.xml,image/*,audio/*" multiple aria-label="Choose learning material files" onChange={event => { if (event.currentTarget.files) onFiles(Array.from(event.currentTarget.files)); event.currentTarget.value = '' }} />
           <div className="upload-symbol">+</div>
           <b>{dragging ? 'Drop files to import' : 'Drop learning material here'}</b>
           <span>or <button type="button" className="browse-link" onClick={() => inputRef.current?.click()}>choose files</button></span>
@@ -487,7 +487,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
             imported++
             continue
           }
-          if (/\.(pptx|xlsx)$/i.test(file.name)) {
+          if (/\.(docx|pptx|xlsx)$/i.test(file.name)) {
             const form = new FormData()
             form.append('file', file)
             const extracted = await readApiJson<ApiImportResult>(fetch('/api/ingest/office', { method: 'POST', body: form }), 'The import service')
@@ -496,7 +496,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
             continue
           }
           if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
-            failures.push(`${file.name}: this format is not supported yet. Choose PDF, text, Markdown, CSV, PowerPoint, Excel, an image, audio, video, or a code file.`)
+            failures.push(`${file.name}: this format is not supported yet. Choose PDF, text, Markdown, CSV, Word, PowerPoint, Excel, an image, audio, or a code file.`)
             continue
           }
           const form = new FormData()
@@ -659,12 +659,39 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     ? readPaperPage(currentPaper.text, pageNumber, currentPaper.pageCount)
     : 'No source is open.', [currentPaper])
 
+  const showOutsideImage = useCallback(async (image: Blob, info: { id: string; title: string; sourceUrl: string; credit: string; license: string; licenseUrl: string }) => {
+    const editor = editorRef.current
+    if (!currentPaper || !editor) return 'No lesson canvas is ready.'
+    const controller = new AbortController()
+    drawAbortRef.current = controller
+    const result = await placeOutsideImage(editor, image, info, checkpointIndexRef.current, controller.signal)
+    return result.message
+  }, [currentPaper])
+
+  const persistTaughtCheckpoint = useCallback(async (paper: ImportedPaper, activePlan: TeachingPlan, index: number) => {
+    const checkpoint = activePlan.sessions[index]
+    const teacherTranscript = transcriptRef.current.slice(checkpointTranscriptStartRef.current).filter(line => line.role === 'Tutor').map(line => line.text).join('\n').slice(-12_000)
+    if (!checkpoint || paper.sourceKind === 'topic' || !teacherTranscript.trim()) return
+    const priorKnowledge = relevantKnowledge(knowledgeGraphRef.current, [paper.id, ...selectedSourceIds])
+    const update = await extractTaughtKnowledge({ paperTitle: paper.title, pageCount: paper.pageCount, text: paper.text,
+      checkpoint: { title: checkpoint.title, goal: checkpoint.goal, sourcePages: checkpoint.sourcePages }, teacherTranscript, priorKnowledge })
+    if (currentId !== paper.id) return
+    const { graph } = await saveLearningOutcome(paper.id, value => mergeTaughtKnowledge(value, update, {
+      paperId: paper.id, paperTitle: paper.title, checkpoint: checkpoint.title, segments: paper.sourceSegments,
+    }), state => state)
+    if (currentId === paper.id) { knowledgeGraphRef.current = graph; setKnowledgeGraph(graph) }
+  }, [currentId, selectedSourceIds])
+
   const moveCheckpoint = useCallback(async (direction: 'next' | 'previous') => {
     const activePlan = planRef.current
     if (!activePlan) return 'No lesson is ready.'
     // At the last checkpoint we have while the rest of the course is still being planned: wait, don't end the lesson.
     const job = courseJobRef.current
     if (direction === 'next' && checkpointIndexRef.current >= activePlan.sessions.length - 1 && job?.status === 'running' && job.paperId === currentPaper?.id) {
+      if (currentPaper) {
+        try { await persistTaughtCheckpoint(currentPaper, activePlan, checkpointIndexRef.current) }
+        catch (reason) { setError(`Could not save this checkpoint's source knowledge: ${errorMessage(reason)}`) }
+      }
       awaitingNextRef.current = true
       setStatus('Nice work. Your next checkpoint is being prepared...')
       setTutorDetail('The rest of the course is being planned from your sources; the next checkpoint opens as soon as it is ready.')
@@ -672,13 +699,18 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     }
     const delta = direction === 'next' ? 1 : -1
     const next = Math.max(0, Math.min(activePlan.sessions.length - 1, checkpointIndexRef.current + delta))
+    const finalCheckpoint = direction === 'next' && next === checkpointIndexRef.current && checkpointIndexRef.current === activePlan.sessions.length - 1
+    if (direction === 'next' && currentPaper && (next > checkpointIndexRef.current || finalCheckpoint)) {
+      try { await persistTaughtCheckpoint(currentPaper, activePlan, checkpointIndexRef.current) }
+      catch (reason) { setError(`Could not save this checkpoint's source knowledge: ${errorMessage(reason)}`) }
+    }
     drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
     checkpointIndexRef.current = next
     setCheckpointIndex(next)
     await persistLessonState(activePlan, next)
     checkpointTranscriptStartRef.current = transcriptRef.current.length
     return formatCheckpointBrief(buildCheckpointBrief(activePlan, next, knowledgeGraphRef.current, learnerEvidenceRef.current, currentPaper?.pageCount))
-  }, [currentPaper, persistLessonState])
+  }, [currentPaper, persistLessonState, persistTaughtCheckpoint])
 
   // "Restart this concept" / "go back a step": wipe the tutor's marks for that concept (learner marks stay) and start it over.
   const restartConcept = useCallback(async (scope: 'current' | 'previous') => {
@@ -748,6 +780,19 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
       void shareDiagnosticWithPlanner(job.jobId, { languageLevel: languageLevelRef.current, diagnosticSummary: summary }).catch(() => { /* the plan still adapts live */ })
     } else diagnosticResultRef.current = { paperId, summary }
   }, [])
+
+  const setLanguagePreference = useCallback((requested: number) => {
+    const level = Math.min(AIMD.max, Math.max(AIMD.min, Math.round(requested)))
+    languageLevelRef.current = level
+    setLanguageLevel(level)
+    if (currentId) { try { localStorage.setItem(levelKey(currentId), String(level)) } catch { /* storage unavailable */ } }
+    tutorRef.current?.setLanguageGuide(languageGuide(level))
+    const chat = diagnosticChatRef.current
+    const job = courseJobRef.current
+    if (chat && job?.paperId === chat.paperId && job.status === 'running') {
+      void shareDiagnosticWithPlanner(job.jobId, { languageLevel: level, diagnosticSummary: chat.summary }).catch(() => { /* live tutor guidance still updates */ })
+    }
+  }, [currentId, levelKey])
 
   const openDiagnostic = useCallback((paper: ImportedPaper) => {
     diagnosticResultRef.current = null
@@ -820,6 +865,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
         presentTeachingBeat,
         drawDiagram,
         showSourcePage,
+        placeOutsideImage: showOutsideImage,
         readSourcePage,
         moveCheckpoint,
         restartConcept,
@@ -852,7 +898,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
       setTutorStatus('error')
       setTutorDetail(microphoneErrorMessage(reason) || message)
     }
-  }, [currentPaper, drawDiagram, knowledgeGraph, learnerEvidence, moveCheckpoint, presentTeachingBeat, readSourcePage, restartConcept, showSourcePage, updateDiagnosticChat])
+  }, [currentPaper, drawDiagram, knowledgeGraph, learnerEvidence, moveCheckpoint, presentTeachingBeat, readSourcePage, restartConcept, showOutsideImage, showSourcePage, updateDiagnosticChat])
 
   const pauseTutor = useCallback(() => {
     drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()
@@ -906,7 +952,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
       tutorRef.current.ask(question)
       return
     }
-    const result = await readApiJson<{ answer: string }>(fetch('/api/teach/ask', {
+    const result = await readApiJson<{ answer: string; canvasWidget?: WidgetData | null }>(fetch('/api/teach/ask', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         title: paper.title, question, checkpoint,
@@ -917,10 +963,29 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     }), 'The learning service')
     if (currentId !== paper.id) return
     if (typeof result.answer !== 'string' || !result.answer.trim()) throw new Error('The tutor returned no answer.')
-    const lines = [...transcriptRef.current, { role: 'You' as const, text: question }, { role: 'Tutor' as const, text: result.answer.trim() }].slice(-8)
+    let tutorReply = result.answer.trim()
+    if (result.canvasWidget) {
+      const widget = result.canvasWidget
+      const actionId = `chat_${crypto.randomUUID().replaceAll('-', '')}`
+      try {
+        await presentTeachingBeat({
+          beatId: actionId, context: `Adding ${widget.title} to the canvas.`, speech: `Here is the requested ${widget.kind}.`,
+          pauseMs: 0, waitForLearner: true, placement: 'new-section', anchorBeatId: '',
+          actions: [{ _type: 'widget', id: actionId, atMs: 0, x: 0, y: 0, w: 380, h: 220, ...widget }],
+        })
+      } catch (reason) {
+        setTutorStatus('error')
+        setTutorDetail(errorMessage(reason))
+        throw reason
+      }
+      setTutorStatus('idle')
+      setTutorDetail('Canvas updated.')
+      tutorReply = `Added “${widget.title}” to the canvas.`
+    }
+    const lines = [...transcriptRef.current, { role: 'You' as const, text: question }, { role: 'Tutor' as const, text: tutorReply }].slice(-8)
     transcriptRef.current = lines
     setTranscript(lines)
-  }, [currentPaper, currentId, tutorStatus])
+  }, [currentPaper, currentId, tutorStatus, presentTeachingBeat])
 
   const storeTeachingPlan = useCallback(async (paper: ImportedPaper, nextPlan: TeachingPlan) => {
     if (currentId !== paper.id) return
@@ -953,7 +1018,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
       const learningGoal = paper.sourceKind === 'topic'
         ? `Understand what ${paper.title} is and how it works: its core ideas and mechanics, without tangents.`
         : goal?.trim() || defaultLearningGoal
-      const priorKnowledge = { propositions: knowledgeGraph.propositions?.slice(-100).map(({ id, concept, statement }) => ({ id, concept, statement })) || [], reasoningLinks: knowledgeGraph.reasoningLinks?.slice(-200).map(({ source, target, relationType, reason }) => ({ source, target, relationType, reason })) || [] }
+      const priorKnowledge = relevantKnowledge(knowledgeGraph, [paper.id, ...selectedSourceIds])
       // Fast path: checkpoint 1 now; the agent team plans the rest in the background. Falls back to one full plan.
       let nextPlan: TeachingPlan
       let jobId = ''
@@ -1098,8 +1163,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
         currentPlan, completedCount: Math.min(currentPlan.sessions.length, Math.max(1, checkpointIndexRef.current + (advance ? 1 : 0))),
         knowledge: latestConceptEvidence(learnerEvidenceRef.current).slice(0, 100), evidence: learnerEvidenceRef.current.slice(-20),
         priorKnowledge: {
-          propositions: (knowledge.propositions || []).slice(-100).map(({ id, concept, statement }) => ({ id, concept, statement })),
-          chains: (knowledge.chains || []).slice(-100).map(({ id, premises, conclusion, reason }) => ({ id, premises, conclusion, reason })),
+          ...relevantKnowledge(knowledge, [paper.id, ...selectedSourceIds]),
         },
       })
       if (planRef.current !== currentPlan) return
@@ -1215,7 +1279,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
             {planBusy && <PaperLoader compact={diagnosticChat?.paperId === currentId} label="Planning your lesson…" lines={[currentPaper?.title || 'Your lesson', ...((currentId && activeProject?.summaries[currentId]?.keyIdeas) || [])]} />}
             {currentPaper && diagnosticChat?.paperId === currentPaper.id && <DiagnosticChat
               title={currentPaper.title} turns={diagnosticChat.turns} busy={diagnosticChat.busy} done={diagnosticChat.done} summary={diagnosticChat.summary}
-              error={diagnosticChat.error} level={languageLevel} planReady={!planBusy && Boolean(plan)}
+              error={diagnosticChat.error} level={languageLevel} onLevelChange={setLanguagePreference} planReady={!planBusy && Boolean(plan)}
               onAnswer={text => void answerDiagnostic(text)} onClose={() => updateDiagnosticChat(null)} onStart={() => void startTutor()}
             />}
             {!planBusy && tutorStatus === 'connecting' && <PaperLoader compact label="Getting ready…" />}
