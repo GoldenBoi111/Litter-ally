@@ -12,7 +12,7 @@ import { AIMD, languageGuide, nextLevel, readLearnerSignal, type AimdSignal } fr
 import { DiagnosticChat } from './DiagnosticChat'
 import { finishPdfExtraction, type PdfExtraction } from './pdfImport'
 import { importImageSource, importMediaSource, importTextSource } from './sourceImport'
-import { placeSourceImage } from './sourceImage'
+import { placeOutsideImage, placeSourceImage } from './sourceImage'
 import { LessonDock } from './LessonDock'
 import { PaperLoader } from './PaperLoader'
 import { Board } from './board/Board'
@@ -659,6 +659,15 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
     ? readPaperPage(currentPaper.text, pageNumber, currentPaper.pageCount)
     : 'No source is open.', [currentPaper])
 
+  const showOutsideImage = useCallback(async (image: Blob, info: { id: string; title: string; sourceUrl: string; credit: string; license: string; licenseUrl: string }) => {
+    const editor = editorRef.current
+    if (!currentPaper || !editor) return 'No lesson canvas is ready.'
+    const controller = new AbortController()
+    drawAbortRef.current = controller
+    const result = await placeOutsideImage(editor, image, info, checkpointIndexRef.current, controller.signal)
+    return result.message
+  }, [currentPaper])
+
   const moveCheckpoint = useCallback(async (direction: 'next' | 'previous') => {
     const activePlan = planRef.current
     if (!activePlan) return 'No lesson is ready.'
@@ -820,6 +829,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
         presentTeachingBeat,
         drawDiagram,
         showSourcePage,
+        placeOutsideImage: showOutsideImage,
         readSourcePage,
         moveCheckpoint,
         restartConcept,
@@ -852,7 +862,7 @@ export default function App({ user, onUserUpdated, onSignOut, notice }: { user: 
       setTutorStatus('error')
       setTutorDetail(microphoneErrorMessage(reason) || message)
     }
-  }, [currentPaper, drawDiagram, knowledgeGraph, learnerEvidence, moveCheckpoint, presentTeachingBeat, readSourcePage, restartConcept, showSourcePage, updateDiagnosticChat])
+  }, [currentPaper, drawDiagram, knowledgeGraph, learnerEvidence, moveCheckpoint, presentTeachingBeat, readSourcePage, restartConcept, showOutsideImage, showSourcePage, updateDiagnosticChat])
 
   const pauseTutor = useCallback(() => {
     drawAbortRef.current?.abort(); diagramAbortRef.current?.abort()

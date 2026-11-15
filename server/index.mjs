@@ -20,6 +20,7 @@ import { createLibraryRouter, runMaintenance } from './library.mjs'
 import { createProjectLearningRouter } from './project-learning.mjs'
 import { createCourseRouter } from './deep-course/routes.mjs'
 import { searchBackground } from './deep-course/exa-broker.mjs'
+import { searchLessonImage } from './visual-search.mjs'
 
 const HOST = '127.0.0.1'
 const PORT = Number(process.env.PAPER_BOARD_PORT || 5186)
@@ -75,7 +76,8 @@ Coordinates are a local 1200-by-700 drawing area with the origin at the top left
 - Words and equations are text actions. Write labels in plain words first and add notation only once the idea has landed; derive equations step by step.
 - Revise only your own work: move repositions your earlier marks (the cursor visibly drags them) and remove corrects them. Never move or remove learner-created work.
 - Palette: black, grey, light-violet, violet, blue, light-blue, yellow, orange, green, light-green, light-red, red, white.
-- draw_lesson_diagram is slow (about half a minute before any ink). Use it only when the learner asks for a custom visual.
+- Use show_source_page when a cited page, slide, or imported image has a useful visual. For a topic without one, use find_lesson_image when a real illustration would clarify the current idea. At most one outside image per checkpoint; name Wikimedia Commons and its credit when discussing it. A found image is background, not evidence from the learner's source.
+- Use draw_lesson_diagram for a planned checkpoint visual when its structure needs more than simple strokes or labels, as well as for learner-requested custom visuals. It runs in the background, so keep teaching while it draws.
 
 THE LEARNER'S MARKS
 - When the learner says "this", or circles, points, draws arrows, or scribbles on the board, call inspect_canvas_selection first. Selected widgets come back with their data.
@@ -95,8 +97,9 @@ const voiceTools = [
   { type: 'function', name: 'present_teaching_beat', description: 'Present one teaching beat: speech plus the board actions that appear during it, timed with atMs to the words. Pen strokes draw diagrams, arrows, circles, underlines, highlights, and corrections (smooth, evenly spaced points; one stroke per continuous line). Text actions write labels and equations in the draw font. A widget action places a filled data display in one step: table (labels = column headers, rows = cells), bar or line (labels = categories, series = named value lists matching labels), pie (labels = slices, one series of sizes), stats (labels = figure names, one series of figures, unit suffix), or timeline (rows = [when, what] pairs); leave unused fields empty and use only the source\'s real data. Move and remove revise only your own earlier marks. Stable beat and action ids let an interrupted beat resume. Set waitForLearner after an important idea or worked section; otherwise the next beat may be prefetched.', parameters: teachingBeatSchema, strict: true },
   { type: 'function', name: 'look_up_outside_definition', description: 'Search reputable outside sources (scholarly and official sites, via Exa) for a term or concept the learner asks about that their material does not define or explain. Returns short excerpts with titles and URLs. Use the subject of the lesson as context so the right meaning comes back.', parameters: { type: 'object', properties: { term: { type: 'string', minLength: 2, maxLength: 120 }, context: { type: 'string', maxLength: 120 } }, required: ['term', 'context'], additionalProperties: false }, strict: true },
   { type: 'function', name: 'show_source_page', description: 'Open a cited source location on the canvas and inspect it before teaching its content.', parameters: { type: 'object', properties: { pageNumber: { type: 'integer', minimum: 1 } }, required: ['pageNumber'], additionalProperties: false }, strict: true },
+  { type: 'function', name: 'find_lesson_image', description: 'Find and place one attributed Wikimedia Commons illustration for the current concept via Exa. Use when a real visual adds clarity and the supplied source has no useful image. The image is outside background, not source evidence.', parameters: { type: 'object', properties: { query: { type: 'string', minLength: 4, maxLength: 120 } }, required: ['query'], additionalProperties: false }, strict: true },
   { type: 'function', name: 'read_source_segment', description: 'Read extracted text from any source segment by its number, including segments not cited in the current checkpoint.', parameters: { type: 'object', properties: { pageNumber: { type: 'integer', minimum: 1 } }, required: ['pageNumber'], additionalProperties: false }, strict: true },
-  { type: 'function', name: 'draw_lesson_diagram', description: 'Slow background drawing (about half a minute before any ink appears). Use only when the learner asks for a custom visual; draw planned checkpoint visuals yourself with present_teaching_beat instead. Use the matching zero-based diagramIndex. For a learner-requested custom visual, put its concrete contents in request; otherwise use an empty request.', parameters: { type: 'object', properties: { diagramIndex: { type: 'integer', minimum: 0 }, request: { type: 'string', maxLength: 600 } }, required: ['diagramIndex', 'request'], additionalProperties: false }, strict: true },
+  { type: 'function', name: 'draw_lesson_diagram', description: 'Draw a planned checkpoint visual in the background when it needs a recognizable structure beyond simple strokes, or draw a learner-requested custom visual. Use the matching zero-based diagramIndex; put a custom request in request, otherwise use an empty string. Keep teaching while it draws.', parameters: { type: 'object', properties: { diagramIndex: { type: 'integer', minimum: 0 }, request: { type: 'string', maxLength: 600 } }, required: ['diagramIndex', 'request'], additionalProperties: false }, strict: true },
   { type: 'function', name: 'restart_concept', description: 'Restart a concept from its beginning when the learner asks to restart, start over, redo, or go back a step: erases your own board marks for that concept (learner marks stay) and resets it to its first point. scope current restarts the concept in progress; scope previous steps back to the concept before it and restarts that one.', parameters: { type: 'object', properties: { scope: { type: 'string', enum: ['current', 'previous'] } }, required: ['scope'], additionalProperties: false }, strict: true },
   { type: 'function', name: 'move_checkpoint', description: 'Move the lesson to the next or previous checkpoint when the learner asks.', parameters: { type: 'object', properties: { direction: { type: 'string', enum: ['next', 'previous'] } }, required: ['direction'], additionalProperties: false }, strict: true },
   { type: 'function', name: 'inspect_canvas_selection', description: 'Inspect shapes inside the learner\'s current canvas selection or hand-drawn circle before answering.', parameters: { type: 'object', properties: { question: { type: 'string' } }, required: ['question'], additionalProperties: false }, strict: true },
@@ -544,6 +547,18 @@ app.post('/api/background/lookup', async (req, res) => {
     res.json({ term, results: lookupCache.get(key) })
   } catch (error) {
     res.status(502).json({ error: error instanceof Error ? error.message : 'The outside lookup failed.' })
+  }
+})
+
+app.post('/api/background/image', async (req, res) => {
+  const query = typeof req.body?.query === 'string' ? req.body.query.replace(/\s+/g, ' ').trim() : ''
+  if (query.length < 4 || query.length > 120) return res.status(400).json({ error: 'An image query of 4 to 120 characters is required.' })
+  const apiKey = process.env.EXA_API_KEY?.trim()
+  if (!apiKey) return res.status(503).json({ error: 'EXA_API_KEY is not configured, so image search is unavailable.' })
+  try {
+    res.json({ image: await searchLessonImage({ apiKey, query }) })
+  } catch (error) {
+    res.status(502).json({ error: error instanceof Error ? error.message : 'Image search failed.' })
   }
 })
 
