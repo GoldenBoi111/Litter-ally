@@ -318,6 +318,21 @@ export function mergeTaughtKnowledge(graph: KnowledgeGraph, update: ExtractedKno
   return { ...graph, propositions: [...propositions.values()], chains: [...chains.values()] }
 }
 
+export function relevantKnowledge(graph: KnowledgeGraph, sourceIds: string[]) {
+  const sources = new Set(sourceIds)
+  const propositions = graph.propositions || []
+  const relevant = new Set(propositions.filter(item => item.sources.some(source => sources.has(source.sourceId || '') || sources.has(source.paperId))).map(item => item.id))
+  const reasoningLinks = (graph.reasoningLinks || []).filter(link => relevant.has(link.source) || relevant.has(link.target)).slice(0, 80)
+  for (const link of reasoningLinks) { relevant.add(link.source); relevant.add(link.target) }
+  const chains = (graph.chains || []).filter(chain => [chain.conclusion, ...chain.premises].some(id => relevant.has(id))).slice(0, 40)
+  for (const chain of chains) { relevant.add(chain.conclusion); chain.premises.forEach(id => relevant.add(id)) }
+  return {
+    propositions: propositions.filter(item => relevant.has(item.id)).slice(0, 40).map(({ id, concept, statement }) => ({ id, concept, statement })),
+    reasoningLinks: reasoningLinks.map(({ source, target, relationType, reason }) => ({ source, target, relationType, reason })),
+    chains: chains.map(({ id, premises, conclusion, reason }) => ({ id, premises, conclusion, reason })),
+  }
+}
+
 export async function listPapers(): Promise<ImportedPaper[]> {
   const stored = await loadStoredPapers()
   await Promise.all(stored.map(loadBinary))
