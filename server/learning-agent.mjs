@@ -19,7 +19,7 @@ export const checkpoint = z.object({
   title: z.string(), minutes: z.number().int().min(10).max(180), goal: z.string(), concepts: z.array(z.string()).min(1).max(5),
   conceptIds: z.array(z.string()).min(1).max(5), activities: z.array(z.string().max(160)).max(1), narration: z.string().min(150).max(900),
   sourcePages: z.array(z.number().int().min(1).max(300)).min(1).max(3), pageFocus: z.string(),
-  diagrams: z.array(diagram).min(1).max(1), checkForUnderstanding: z.string().max(200),
+  diagrams: z.array(diagram).min(1).max(4), checkForUnderstanding: z.string().max(200),
   backgroundNotes: z.string().max(500),
   backgroundSources: z.array(z.object({ title: z.string(), url: z.string().max(2048), relevance: z.string().max(200) })).max(2),
 })

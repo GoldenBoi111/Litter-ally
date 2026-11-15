@@ -96,6 +96,7 @@ export class HybridTutor {
   private interruptedForInput = false
   private lastBeatEndedAt = 0
   private diagramAttempt = 0
+  private diagramQueue: Promise<void> = Promise.resolve()
   private readonly requestedDiagrams = new Set<string>()
   private readonly seenBeatIds = new Set<string>()
   private readonly completedBeatIds = new Set<string>()
@@ -818,12 +819,16 @@ export class HybridTutor {
     if (this.requestedDiagrams.has(key)) return
     this.requestedDiagrams.add(key)
     const turn = this.turnId
-    const attempt = ++this.diagramAttempt
-    void this.callbacks.drawDiagram(diagramIndex, request.slice(0, 600)).then(result => {
-      if (turn === this.turnId && attempt === this.diagramAttempt && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: ${result})` })
-    }).catch(error => {
-      this.requestedDiagrams.delete(key)
-      if (turn === this.turnId && attempt === this.diagramAttempt && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: the diagram failed: ${error instanceof Error ? error.message : 'unknown error'}. Continue without it.)` })
+    const attempt = this.diagramAttempt
+    this.diagramQueue = this.diagramQueue.then(async () => {
+      if (turn !== this.turnId || attempt !== this.diagramAttempt || this.closed) return
+      try {
+        const result = await this.callbacks.drawDiagram(diagramIndex, request.slice(0, 600))
+        if (turn === this.turnId && attempt === this.diagramAttempt && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: ${result})` })
+      } catch (error) {
+        this.requestedDiagrams.delete(key)
+        if (turn === this.turnId && attempt === this.diagramAttempt && !this.closed) this.input.push({ type: 'message', role: 'user', content: `(Board update, not from the learner: the diagram failed: ${error instanceof Error ? error.message : 'unknown error'}. Continue without it.)` })
+      }
     })
   }
 
@@ -886,7 +891,7 @@ export class HybridTutor {
     } else if (name === 'draw_lesson_diagram' && Number.isInteger(args.diagramIndex)) {
       const request = typeof args.request === 'string' ? args.request.trim().slice(0, 600) : ''
       this.startDiagram(request, Number(args.diagramIndex))
-      output = 'A detailed visual is being drawn in the background. Continue explaining with present_teaching_beat while it appears; do not request the same diagram again.'
+      output = 'A detailed visual is queued and will draw in order. Continue with distinct board teaching; wait for its board update before requesting the next diagram, and never request the same one again.'
     } else if (name === 'restart_concept' && (args.scope === 'current' || args.scope === 'previous')) {
       const brief = await this.callbacks.restartConcept(args.scope)
       this.diagramAttempt += 1
