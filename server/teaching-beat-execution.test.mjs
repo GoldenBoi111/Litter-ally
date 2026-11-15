@@ -52,6 +52,7 @@ function fakeEditor(initial = []) {
     getShapePageBounds: shape => {
       if (shape.bounds) return shape.bounds
       if (shape.type === 'text') return { x: shape.x, y: shape.y, w: String(shape.props.richText).length * 20, h: 40 }
+      if (shape.type === 'geo') return { x: shape.x, y: shape.y, w: shape.props.w * shape.props.scale, h: shape.props.h * shape.props.scale }
       if (shape.type === 'draw') {
         const points = shape.props.segments[0].points
         return { x: shape.x + Math.min(...points.map(point => point.x)), y: shape.y + Math.min(...points.map(point => point.y)), w: Math.max(...points.map(point => point.x)) - Math.min(...points.map(point => point.x)) + 12, h: Math.max(...points.map(point => point.y)) - Math.min(...points.map(point => point.y)) + 12 }
@@ -339,14 +340,19 @@ test('an arrow target follows a label moved clear of another label', async () =>
 test('diagram connectors start between their nodes rather than at the canvas origin', async () => {
   const editor = fakeEditor()
   const actions = [
-    { _type: 'create', id: 'one', shape: 'rectangle', text: 'one', color: 'blue' },
-    { _type: 'create', id: 'two', shape: 'rectangle', text: 'two', color: 'blue' },
-    { _type: 'create', id: 'three', shape: 'rectangle', text: 'three', color: 'blue' },
+    { _type: 'create', id: 'one', shape: 'rectangle', text: 'one', color: 'blue', x: 0, y: 0 },
+    { _type: 'create', id: 'two', shape: 'rectangle', text: 'two', color: 'blue', x: 900, y: 0 },
+    { _type: 'create', id: 'three', shape: 'rectangle', text: 'three', color: 'blue', x: 1800, y: 0 },
     { _type: 'connect', id: 'one_two', fromId: 'one', toId: 'two', label: 'flows', color: 'blue' },
   ]
   await applyDiagramPlan(editor, { actions }, { lessonId: 'paper', checkpointIndex: 0, diagramIndex: 0, diagramKind: 'flow', signal: new AbortController().signal })
+  const one = [...editor.shapes.values()].find(shape => shape.type === 'geo' && shape.meta?.diagramId)
+  const two = [...editor.shapes.values()].filter(shape => shape.type === 'geo' && shape.meta?.diagramId)[1]
+  const oneBounds = editor.getShapePageBounds(one)
+  const twoBounds = editor.getShapePageBounds(two)
   const arrow = [...editor.shapes.values()].find(shape => shape.type === 'arrow')
-  assert.ok(arrow.x > 1000)
-  assert.equal(arrow.props.end.x, 900)
-  assert.equal(arrow.props.end.y, 0)
+  assert.equal(arrow.x, oneBounds.x + oneBounds.w)
+  assert.equal(arrow.y, oneBounds.y + oneBounds.h / 2)
+  assert.equal(arrow.x + arrow.props.end.x, twoBounds.x)
+  assert.equal(arrow.y + arrow.props.end.y, twoBounds.y + twoBounds.h / 2)
 })

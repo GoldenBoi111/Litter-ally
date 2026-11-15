@@ -4,9 +4,9 @@ import { diagramPlanSchema, generateValidatedDiagram, validateDiagramPlan, valid
 
 const valid = {
   actions: [
-    { _type: 'create', id: 'input', shape: 'box', text: 'Input', color: 'blue' },
-    { _type: 'create', id: 'process', shape: 'box', text: 'Process', color: 'grey' },
-    { _type: 'create', id: 'output', shape: 'ellipse', text: 'Output', color: 'green' },
+    { _type: 'create', id: 'input', shape: 'box', text: 'Input', color: 'blue', x: 0, y: 0 },
+    { _type: 'create', id: 'process', shape: 'box', text: 'Process', color: 'grey', x: 900, y: 0 },
+    { _type: 'create', id: 'output', shape: 'ellipse', text: 'Output', color: 'green', x: 1800, y: 0 },
     { _type: 'connect', id: 'flow', fromId: 'input', toId: 'process', label: 'transforms', color: 'grey' },
     { _type: 'connect', id: 'result', fromId: 'process', toId: 'output', label: 'produces', color: 'grey' },
   ],
@@ -58,6 +58,7 @@ test('gives every strict diagram action discriminator an explicit JSON Schema ty
     { type: 'string', const: 'connect' },
     { type: 'string', const: 'stroke' },
     { type: 'string', const: 'text' },
+    { type: 'string', const: 'arrow' },
   ])
 })
 
