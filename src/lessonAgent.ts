@@ -3,7 +3,7 @@ import { compressLegacySegments } from '@tldraw/tlschema'
 import { validateTeachingBeat } from '../server/agent-actions.mjs'
 import { knowledgeNodeId, readApiJson, type KnowledgeGraph, type LearningEvidence, type KnowledgeProposition, type KnowledgeReasoningChain } from './storage'
 import type { LearningDiagnostic, LearningStatus } from './learning'
-import type { WidgetData } from './lessonWidgets'
+import { getWidgetSize, type WidgetData } from './lessonWidgets'
 
 export type DiagramBrief = {
   title: string
@@ -182,6 +182,12 @@ const ACTION_DELAY_MS = 90
 export const BEAT_PACE = 1.6
 /** Local coordinate space the model draws in for each beat (matches the server prompt). */
 const DRAWING_AREA = { w: 1200, h: 700 }
+/** Each concept gets its own 2400-pixel column: source material on the left, the tutor's region beside it. */
+const CONCEPT_COLUMN = 2400
+const TUTOR_COLUMN_OFFSET = 1100
+const CONCEPT_TOP = 220
+/** Clear space kept around a concept's drawing region, so a finished concept never bleeds into the next one. */
+const REGION_MARGIN = 48
 /** Rough speaking rate of the tutor voice, used to spread a beat's ink across its narration. */
 const SPOKEN_MS_PER_WORD = 330
 export const DIAGRAM_PACE = 1.8
@@ -240,7 +246,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
   const diagramId = `${context.checkpointIndex}-${context.diagramIndex}`
   const existing = editor.getCurrentPageShapes()
     .filter(shape => shape.meta?.owner === 'agent' && shape.meta?.lessonId === context.lessonId && shape.meta?.diagramId === diagramId)
-  const boardStart = { x: context.checkpointIndex * 2400 + 1100, y: 220 }
+  const boardStart = conceptRegion(editor, context.lessonId, context.checkpointIndex)
 
   if (plan.actions.some(action => action._type === 'stroke' || action._type === 'text')) {
     const interruptedShape = existing.find(shape => shape.meta?.actionState === 'interrupted')
@@ -366,20 +372,96 @@ function clearBeatOrigin(editor: Editor, beat: Pick<TeachingBeat, 'actions'>, st
   return origin
 }
 
+/** Every mark the tutor made for one concept: ink, lettering, widgets, diagrams and the material it brought in. */
+export function conceptMarks(editor: Editor, lessonId: string, checkpointIndex: number) {
+  return editor.getCurrentPageShapes().filter(shape =>
+    (shape.meta?.owner === 'agent' || shape.meta?.owner === 'source') &&
+    shape.meta?.checkpointId === String(checkpointIndex) &&
+    (shape.meta?.owner !== 'agent' || shape.meta?.lessonId === lessonId))
+}
+
+/** Restarting a concept wipes everything the tutor put up for it; the learner's own marks are never touched. */
+export function clearConceptMarks(editor: Editor, lessonId: string, checkpointIndex: number) {
+  const marks = conceptMarks(editor, lessonId, checkpointIndex)
+  if (marks.length) editor.deleteShapes(marks.map(shape => shape.id))
+  return marks.length
+}
+
+/** True when a whole drawing region, plus its margin, holds nothing already. */
+function regionIsClear(editor: Editor, origin: { x: number; y: number }, keep: Set<string>) {
+  const area = {
+    minX: origin.x - REGION_MARGIN, minY: origin.y - REGION_MARGIN,
+    maxX: origin.x + DRAWING_AREA.w + REGION_MARGIN, maxY: origin.y + DRAWING_AREA.h + REGION_MARGIN,
+  }
+  return !editor.getCurrentPageShapes().some(shape => {
+    if (keep.has(shape.id)) return false
+    const bounds = editor.getShapePageBounds(shape)
+    return !!bounds && bounds.x < area.maxX && bounds.x + bounds.w > area.minX && bounds.y < area.maxY && bounds.y + bounds.h > area.minY
+  })
+}
+
+/**
+ * The clear patch of board a concept works in: the region it already started, or — for a concept with nothing
+ * on the board yet — a free region in its own column, stepping down and then across until nothing is in the way.
+ */
+export function conceptRegion(editor: Editor, lessonId: string, checkpointIndex: number) {
+  const started = conceptMarks(editor, lessonId, checkpointIndex)
+    .filter(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number')
+  if (started.length) return {
+    x: Math.min(...started.map(shape => shape.meta.originX as number)),
+    y: Math.min(...started.map(shape => shape.meta.originY as number)),
+  }
+  const keep = new Set(conceptMarks(editor, lessonId, checkpointIndex).map(shape => shape.id))
+  const stepY = DRAWING_AREA.h + REGION_MARGIN * 2
+  for (let column = 0; column < 64; column++) {
+    for (let row = 0; row < 8; row++) {
+      const origin = { x: checkpointIndex * CONCEPT_COLUMN + TUTOR_COLUMN_OFFSET + column * CONCEPT_COLUMN, y: CONCEPT_TOP + row * stepY }
+      if (regionIsClear(editor, origin, keep)) return origin
+    }
+  }
+  // A board this full still gets a fresh start: below everything on it.
+  const bottoms = editor.getCurrentPageShapes().flatMap(shape => {
+    const bounds = editor.getShapePageBounds(shape)
+    return bounds ? [bounds.y + bounds.h] : []
+  })
+  return { x: checkpointIndex * CONCEPT_COLUMN + TUTOR_COLUMN_OFFSET, y: bottoms.length ? Math.max(...bottoms) + REGION_MARGIN * 2 : CONCEPT_TOP }
+}
+
+/** Bring a concept's region into view, so a restarted or freshly opened concept starts on visibly blank board. */
+export function focusConceptRegion(editor: Editor, lessonId: string, checkpointIndex: number) {
+  const origin = conceptRegion(editor, lessonId, checkpointIndex)
+  editor.zoomToBounds({ x: origin.x, y: origin.y, w: DRAWING_AREA.w, h: DRAWING_AREA.h }, { animation: { duration: 350 }, inset: 48 })
+  return origin
+}
+
+/** A drawing area is full once the marks already in it reach the bottom of its 1200 x 700 space. */
+function areaIsFull(editor: Editor, shapes: ReturnType<Editor['getCurrentPageShapes']>, origin: { x: number; y: number }) {
+  const used = shapes.filter(shape => shape.meta?.originX === origin.x && shape.meta?.originY === origin.y).flatMap(shape => {
+    const bounds = editor.getShapePageBounds(shape)
+    return bounds ? [bounds.y + bounds.h - origin.y] : []
+  })
+  return used.length > 0 && Math.max(...used) > DRAWING_AREA.h
+}
+
 function beatOrigin(editor: Editor, beat: TeachingBeat, lessonId: string, checkpointIndex: number) {
   const shapes = editor.getCurrentPageShapes().filter(shape => shape.meta?.owner === 'agent' && shape.meta?.lessonId === lessonId && shape.meta?.checkpointId === String(checkpointIndex))
   const sameBeat = shapes.find(shape => shape.meta?.beatId === beat.beatId)
   if (sameBeat && typeof sameBeat.meta?.originX === 'number' && typeof sameBeat.meta?.originY === 'number') return { x: sameBeat.meta.originX, y: sameBeat.meta.originY }
   const anchor = beat.placement === 'revisit' && beat.anchorBeatId ? shapes.find(shape => shape.meta?.beatId === beat.anchorBeatId) : undefined
   if (anchor && typeof anchor.meta?.originX === 'number' && typeof anchor.meta?.originY === 'number') return clearBeatOrigin(editor, beat, { x: anchor.meta.originX, y: anchor.meta.originY }, false)
-  // "continue" keeps drawing in the latest area, so consecutive beats build one picture in shared coordinates.
+  // "continue" keeps drawing in the latest area, so consecutive beats build one picture in shared coordinates —
+  // until that area is full, when the tutor has to move on rather than keep piling ink into the same patch.
   if (beat.placement === 'continue') {
     const latest = [...shapes].reverse().find(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number')
-    if (latest) return clearBeatOrigin(editor, beat, { x: latest.meta.originX as number, y: latest.meta.originY as number }, false)
+    const origin = latest ? { x: latest.meta.originX as number, y: latest.meta.originY as number } : null
+    if (origin && !areaIsFull(editor, shapes, origin)) return clearBeatOrigin(editor, beat, origin, false)
   }
+  // A new idea in a concept already under way stacks below that concept's work; a concept with nothing on the
+  // board yet starts in a region that is clear of every other mark, so finished concepts are never drawn over.
+  const region = conceptRegion(editor, lessonId, checkpointIndex)
   const prior = shapes.filter(shape => !shape.meta?.diagramId).flatMap(shape => { const bounds = editor.getShapePageBounds(shape); return bounds ? [bounds.y + bounds.h] : [] })
   const top = Math.min(0, ...beatMarkBounds(beat).map(mark => mark.y))
-  return clearBeatOrigin(editor, beat, { x: checkpointIndex * 2400 + 1100, y: prior.length ? Math.max(...prior) + 60 - top : 220 }, true)
+  return clearBeatOrigin(editor, beat, { x: region.x, y: prior.length ? Math.max(...prior) + 60 - top : region.y }, true)
 }
 
 function smoothStrokePoints(points: Array<{ x: number; y: number }>, closed: boolean) {
@@ -537,17 +619,18 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
     } else if (action._type === 'widget') {
       // A ready-made data widget: placed in one action, then revealed row by row / bar by bar while the tutor speaks.
       const steps = 10
+      const size = getWidgetSize(action, action.w, action.h)
       let progress = Math.max(0, Math.min(steps, Number(existing?.meta?.actionProgress) || 0))
       const corner = { x: origin.x + action.x, y: origin.y + action.y }
       await guideCursor(context.onCursor, cursorPoint, corner, context.signal)
       cursorPoint = corner
       const { _type, id: _actionId, atMs: _atMs, x: _x, y: _y, ...props } = action
-      if (!existing) editor.createShape({ id, type: 'lesson-widget', x: corner.x, y: corner.y, meta: metaFor(action, 'interrupted', 0), props: { ...props, shown: 0 } } as any)
+      if (!existing) editor.createShape({ id, type: 'lesson-widget', x: corner.x, y: corner.y, meta: metaFor(action, 'interrupted', 0), props: { ...props, ...size, shown: 0 } } as any)
       try {
         while (progress < steps) {
           if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
           progress += 1
-          cursorPoint = { x: corner.x + action.w * (progress / steps), y: corner.y + action.h * 0.6 }
+          cursorPoint = { x: corner.x + size.w * (progress / steps), y: corner.y + size.h * 0.6 }
           context.onCursor?.(cursorPoint)
           editor.updateShape({ id, type: 'lesson-widget', meta: metaFor(action, progress === steps ? 'complete' : 'interrupted', progress), props: { shown: progress / steps } } as any)
           await wait(90 * pace, context.signal)
