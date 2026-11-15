@@ -10,6 +10,7 @@ export type TutorCallbacks = {
   presentTeachingBeat: (beat: TeachingBeat) => Promise<TeachingExecutionState>
   drawDiagram: (diagramIndex: number, request?: string) => Promise<string>
   showSourcePage: (pageNumber: number) => Promise<{ message: string; imageUrl?: string; pageText?: string }>
+  placeOutsideImage: (image: Blob, info: { id: string; title: string; sourceUrl: string; credit: string; license: string; licenseUrl: string }) => Promise<string>
   readSourcePage: (pageNumber: number) => string
   moveCheckpoint: (direction: 'next' | 'previous') => Promise<string>
   /** Erases the agent's board marks for a concept and resets it to its start; returns that concept's brief. */
@@ -71,7 +72,6 @@ export class HybridTutor {
   private readonly seenBeatIds = new Set<string>()
   private readonly streaming: boolean
   private readonly bargeIn: boolean
-  private readonly rtcUrl: string
   private readonly iceServers: RTCIceServer[]
   /** True when the local WebRTC voice host is unreachable and we fall back to the browser's own speech APIs. */
   private browserVoice = false
@@ -80,10 +80,9 @@ export class HybridTutor {
   /** Set when the learner cut the tutor off to ask something: answer, then pick the lesson back up. */
   private resumeAfterAnswer = false
 
-  constructor(private callbacks: TutorCallbacks, private preparedAudioContext?: AudioContext, options: { streaming?: boolean; bargeIn?: boolean; rtcUrl?: string; iceServers?: RTCIceServer[] } = {}) {
+  constructor(private callbacks: TutorCallbacks, private preparedAudioContext?: AudioContext, options: { streaming?: boolean; bargeIn?: boolean; iceServers?: RTCIceServer[] } = {}) {
     this.streaming = options.streaming !== false
     this.bargeIn = options.bargeIn !== false
-    this.rtcUrl = options.rtcUrl || 'http://127.0.0.1:8190'
     this.iceServers = options.iceServers || []
   }
 
@@ -403,14 +402,12 @@ export class HybridTutor {
       await waitForIce(peer)
       const local = peer.localDescription
       if (!local) throw new Error('WebRTC could not create a local offer.')
-      const offerUrl = new URL(`${this.rtcUrl.replace(/\/$/, '')}/offer`)
-      const offerRequest: RequestInit & { targetAddressSpace?: 'loopback' | 'local' } = {
+      const offerRequest: RequestInit = {
         method: 'POST', signal: AbortSignal.timeout(20_000),
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ sdp: local.sdp, type: local.type }),
       }
-      if (['localhost', '127.0.0.1', '[::1]'].includes(offerUrl.hostname)) offerRequest.targetAddressSpace = 'loopback'
-      const response = await fetch(offerUrl, offerRequest)
+      const response = await fetch('/api/voice/offer', offerRequest)
       const answer = await response.json().catch(() => ({})) as RTCSessionDescriptionInit & { error?: string }
       if (!response.ok || !answer.sdp || !answer.type) throw new Error(answer.error || `Local voice host returned HTTP ${response.status}.`)
       await peer.setRemoteDescription(answer)
@@ -419,7 +416,7 @@ export class HybridTutor {
       peer.close()
       if (this.peer === peer) this.peer = null
       if (this.control === channel) this.control = null
-      if (error instanceof TypeError) throw new Error(`Could not reach the local voice host at ${this.rtcUrl}. Check its URL, CORS origins, and that the service is running.`)
+      if (error instanceof TypeError) throw new Error('Could not reach the app voice service. Check that the voice service is running.')
       throw error
     }
   }
@@ -820,6 +817,21 @@ export class HybridTutor {
       } catch (error) {
         output = `The outside lookup failed (${error instanceof Error ? error.message : 'unknown error'}). Say the material does not define it and give a short plain explanation labeled as general background.`
       }
+    } else if (name === 'find_lesson_image' && typeof args.query === 'string') {
+      this.callbacks.onStatus('connecting', `Finding an illustration for "${args.query}"…`)
+      try {
+        const response = await fetch('/api/background/image', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: args.query }) })
+        await checkApiResponse(response, 'Image search')
+        const { image } = await response.json() as { image: { id: string; title: string; sourceUrl: string; credit: string; license: string; licenseUrl: string; mimeType: string; data: string } | null }
+        if (!image) output = 'No suitable licensed illustration was found. Continue with a drawn visual.'
+        else {
+          const bytes = Uint8Array.from(atob(image.data), char => char.charCodeAt(0))
+          output = await this.callbacks.placeOutsideImage(new Blob([bytes], { type: image.mimeType }), image)
+          context = { type: 'message', role: 'user', content: [{ type: 'input_text', text: `This Wikimedia Commons image is on the canvas. Treat it as outside background, credit ${image.credit} under ${image.license}, and inspect it before describing its details. Source: ${image.sourceUrl}` }, { type: 'input_image', image_url: `data:${image.mimeType};base64,${image.data}` }] }
+        }
+      } catch (error) {
+        output = `Image lookup failed (${error instanceof Error ? error.message : 'unknown error'}). Continue with a drawn visual.`
+      }
     } else if (name === 'read_source_segment' && Number.isInteger(args.pageNumber)) {
       output = this.callbacks.readSourcePage(Number(args.pageNumber))
     } else if (name === 'draw_lesson_diagram' && Number.isInteger(args.diagramIndex)) {
@@ -869,7 +881,7 @@ export function createSpeechOutput(context: AudioContext): AudioNode {
 const SPEECH_GAIN = 2.5
 
 function browserSpeechAvailable() {
-  return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined'
+  return typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined' && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
 }
 
 function waitForIce(peer: RTCPeerConnection) {
