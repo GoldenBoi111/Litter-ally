@@ -3,7 +3,7 @@ import { compressLegacySegments } from '@tldraw/tlschema'
 import { validateTeachingBeat } from '../server/agent-actions.mjs'
 import { knowledgeNodeId, readApiJson, type KnowledgeGraph, type LearningEvidence, type KnowledgeProposition, type KnowledgeReasoningChain } from './storage'
 import type { LearningDiagnostic, LearningStatus } from './learning'
-import type { WidgetData } from './lessonWidgets'
+import { getWidgetSize, type WidgetData } from './lessonWidgets'
 
 export type DiagramBrief = {
   title: string
@@ -150,6 +150,7 @@ export type DiagramPlan = { actions: DiagramAction[] }
 export type TeachingAction =
   | { _type: 'stroke'; id: string; atMs: number; points: Array<{ x: number; y: number }>; color: string; size: 's' | 'm' | 'l'; closed: boolean }
   | { _type: 'text'; id: string; atMs: number; x: number; y: number; text: string; color: string; size: 's' | 'm' | 'l' | 'xl' }
+  | { _type: 'arrow'; id: string; atMs: number; from: { x: number; y: number }; to: { x: number; y: number }; label: string; color: string; bend: number; both: boolean }
   | { _type: 'remove'; id: string; atMs: number; targetId: string }
   | { _type: 'move'; id: string; atMs: number; targetId: string; dx: number; dy: number }
   | ({ _type: 'widget'; id: string; atMs: number; x: number; y: number; w: number; h: number } & WidgetData)
@@ -182,6 +183,12 @@ const ACTION_DELAY_MS = 90
 export const BEAT_PACE = 1.6
 /** Local coordinate space the model draws in for each beat (matches the server prompt). */
 const DRAWING_AREA = { w: 1200, h: 700 }
+/** Each concept gets its own 2400-pixel column: source material on the left, the tutor's region beside it. */
+const CONCEPT_COLUMN = 2400
+const TUTOR_COLUMN_OFFSET = 1100
+const CONCEPT_TOP = 220
+/** Clear space kept around a concept's drawing region, so a finished concept never bleeds into the next one. */
+const REGION_MARGIN = 48
 /** Rough speaking rate of the tutor voice, used to spread a beat's ink across its narration. */
 const SPOKEN_MS_PER_WORD = 330
 export const DIAGRAM_PACE = 1.8
@@ -240,7 +247,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
   const diagramId = `${context.checkpointIndex}-${context.diagramIndex}`
   const existing = editor.getCurrentPageShapes()
     .filter(shape => shape.meta?.owner === 'agent' && shape.meta?.lessonId === context.lessonId && shape.meta?.diagramId === diagramId)
-  const boardStart = { x: context.checkpointIndex * 2400 + 1100, y: 220 }
+  const boardStart = conceptRegion(editor, context.lessonId, context.checkpointIndex)
 
   if (plan.actions.some(action => action._type === 'stroke' || action._type === 'text')) {
     const interruptedShape = existing.find(shape => shape.meta?.actionState === 'interrupted')
@@ -339,6 +346,11 @@ function beatMarkBounds(beat: Pick<TeachingBeat, 'actions'>) {
       const lines = action.text.split('\n'), font = { s: 20, m: 28, l: 36, xl: 48 }[action.size]
       return [{ type: 'text', x: action.x - 8, y: action.y - 8, w: Math.max(...lines.map(line => line.length)) * font * 0.8 + 16, h: lines.length * font * 1.35 + 16 }]
     }
+    if (action._type === 'arrow') {
+      const x = Math.min(action.from.x, action.to.x), y = Math.min(action.from.y, action.to.y)
+      const bend = Math.abs(action.bend)
+      return [{ type: 'stroke', x: x - 12 - bend, y: y - 12 - bend, w: Math.abs(action.to.x - action.from.x) + 24 + bend * 2, h: Math.abs(action.to.y - action.from.y) + 24 + bend * 2 }]
+    }
     return []
   })
 }
@@ -366,20 +378,96 @@ function clearBeatOrigin(editor: Editor, beat: Pick<TeachingBeat, 'actions'>, st
   return origin
 }
 
+/** Every mark the tutor made for one concept: ink, lettering, widgets, diagrams and the material it brought in. */
+export function conceptMarks(editor: Editor, lessonId: string, checkpointIndex: number) {
+  return editor.getCurrentPageShapes().filter(shape =>
+    (shape.meta?.owner === 'agent' || shape.meta?.owner === 'source') &&
+    shape.meta?.checkpointId === String(checkpointIndex) &&
+    (shape.meta?.owner !== 'agent' || shape.meta?.lessonId === lessonId))
+}
+
+/** Restarting a concept wipes everything the tutor put up for it; the learner's own marks are never touched. */
+export function clearConceptMarks(editor: Editor, lessonId: string, checkpointIndex: number) {
+  const marks = conceptMarks(editor, lessonId, checkpointIndex)
+  if (marks.length) editor.deleteShapes(marks.map(shape => shape.id))
+  return marks.length
+}
+
+/** True when a whole drawing region, plus its margin, holds nothing already. */
+function regionIsClear(editor: Editor, origin: { x: number; y: number }, keep: Set<string>) {
+  const area = {
+    minX: origin.x - REGION_MARGIN, minY: origin.y - REGION_MARGIN,
+    maxX: origin.x + DRAWING_AREA.w + REGION_MARGIN, maxY: origin.y + DRAWING_AREA.h + REGION_MARGIN,
+  }
+  return !editor.getCurrentPageShapes().some(shape => {
+    if (keep.has(shape.id)) return false
+    const bounds = editor.getShapePageBounds(shape)
+    return !!bounds && bounds.x < area.maxX && bounds.x + bounds.w > area.minX && bounds.y < area.maxY && bounds.y + bounds.h > area.minY
+  })
+}
+
+/**
+ * The clear patch of board a concept works in: the region it already started, or — for a concept with nothing
+ * on the board yet — a free region in its own column, stepping down and then across until nothing is in the way.
+ */
+export function conceptRegion(editor: Editor, lessonId: string, checkpointIndex: number) {
+  const started = conceptMarks(editor, lessonId, checkpointIndex)
+    .filter(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number')
+  if (started.length) return {
+    x: Math.min(...started.map(shape => shape.meta.originX as number)),
+    y: Math.min(...started.map(shape => shape.meta.originY as number)),
+  }
+  const keep = new Set(conceptMarks(editor, lessonId, checkpointIndex).map(shape => shape.id))
+  const stepY = DRAWING_AREA.h + REGION_MARGIN * 2
+  for (let column = 0; column < 64; column++) {
+    for (let row = 0; row < 8; row++) {
+      const origin = { x: checkpointIndex * CONCEPT_COLUMN + TUTOR_COLUMN_OFFSET + column * CONCEPT_COLUMN, y: CONCEPT_TOP + row * stepY }
+      if (regionIsClear(editor, origin, keep)) return origin
+    }
+  }
+  // A board this full still gets a fresh start: below everything on it.
+  const bottoms = editor.getCurrentPageShapes().flatMap(shape => {
+    const bounds = editor.getShapePageBounds(shape)
+    return bounds ? [bounds.y + bounds.h] : []
+  })
+  return { x: checkpointIndex * CONCEPT_COLUMN + TUTOR_COLUMN_OFFSET, y: bottoms.length ? Math.max(...bottoms) + REGION_MARGIN * 2 : CONCEPT_TOP }
+}
+
+/** Bring a concept's region into view, so a restarted or freshly opened concept starts on visibly blank board. */
+export function focusConceptRegion(editor: Editor, lessonId: string, checkpointIndex: number) {
+  const origin = conceptRegion(editor, lessonId, checkpointIndex)
+  editor.zoomToBounds({ x: origin.x, y: origin.y, w: DRAWING_AREA.w, h: DRAWING_AREA.h }, { animation: { duration: 350 }, inset: 48 })
+  return origin
+}
+
+/** A drawing area is full once the marks already in it reach the bottom of its 1200 x 700 space. */
+function areaIsFull(editor: Editor, shapes: ReturnType<Editor['getCurrentPageShapes']>, origin: { x: number; y: number }) {
+  const used = shapes.filter(shape => shape.meta?.originX === origin.x && shape.meta?.originY === origin.y).flatMap(shape => {
+    const bounds = editor.getShapePageBounds(shape)
+    return bounds ? [bounds.y + bounds.h - origin.y] : []
+  })
+  return used.length > 0 && Math.max(...used) > DRAWING_AREA.h
+}
+
 function beatOrigin(editor: Editor, beat: TeachingBeat, lessonId: string, checkpointIndex: number) {
   const shapes = editor.getCurrentPageShapes().filter(shape => shape.meta?.owner === 'agent' && shape.meta?.lessonId === lessonId && shape.meta?.checkpointId === String(checkpointIndex))
   const sameBeat = shapes.find(shape => shape.meta?.beatId === beat.beatId)
   if (sameBeat && typeof sameBeat.meta?.originX === 'number' && typeof sameBeat.meta?.originY === 'number') return { x: sameBeat.meta.originX, y: sameBeat.meta.originY }
   const anchor = beat.placement === 'revisit' && beat.anchorBeatId ? shapes.find(shape => shape.meta?.beatId === beat.anchorBeatId) : undefined
   if (anchor && typeof anchor.meta?.originX === 'number' && typeof anchor.meta?.originY === 'number') return clearBeatOrigin(editor, beat, { x: anchor.meta.originX, y: anchor.meta.originY }, false)
-  // "continue" keeps drawing in the latest area, so consecutive beats build one picture in shared coordinates.
+  // "continue" keeps drawing in the latest area, so consecutive beats build one picture in shared coordinates —
+  // until that area is full, when the tutor has to move on rather than keep piling ink into the same patch.
   if (beat.placement === 'continue') {
     const latest = [...shapes].reverse().find(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number')
-    if (latest) return clearBeatOrigin(editor, beat, { x: latest.meta.originX as number, y: latest.meta.originY as number }, false)
+    const origin = latest ? { x: latest.meta.originX as number, y: latest.meta.originY as number } : null
+    if (origin && !areaIsFull(editor, shapes, origin)) return clearBeatOrigin(editor, beat, origin, false)
   }
+  // A new idea in a concept already under way stacks below that concept's work; a concept with nothing on the
+  // board yet starts in a region that is clear of every other mark, so finished concepts are never drawn over.
+  const region = conceptRegion(editor, lessonId, checkpointIndex)
   const prior = shapes.filter(shape => !shape.meta?.diagramId).flatMap(shape => { const bounds = editor.getShapePageBounds(shape); return bounds ? [bounds.y + bounds.h] : [] })
   const top = Math.min(0, ...beatMarkBounds(beat).map(mark => mark.y))
-  return clearBeatOrigin(editor, beat, { x: checkpointIndex * 2400 + 1100, y: prior.length ? Math.max(...prior) + 60 - top : 220 }, true)
+  return clearBeatOrigin(editor, beat, { x: region.x, y: prior.length ? Math.max(...prior) + 60 - top : region.y }, true)
 }
 
 function smoothStrokePoints(points: Array<{ x: number; y: number }>, closed: boolean) {
@@ -430,7 +518,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
   })
 
   // Bring the drawing area into view before the pen starts, so the learner watches the ink appear while the tutor speaks.
-  if (beat.actions.some(action => action._type === 'stroke' || action._type === 'text' || action._type === 'widget')) {
+  if (beat.actions.some(action => action._type === 'stroke' || action._type === 'text' || action._type === 'arrow' || action._type === 'widget')) {
     const area = { x: origin.x, y: origin.y, w: DRAWING_AREA.w, h: DRAWING_AREA.h }
     const view = editor.getViewportPageBounds()
     const visible = area.x >= view.minX && area.y >= view.minY && area.x + area.w <= view.maxX && area.y + area.h <= view.maxY
@@ -441,7 +529,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
   const spokenMs = beat.speech.trim().split(/\s+/).length * SPOKEN_MS_PER_WORD
   const lastCue = Math.max(0, ...beat.actions.map(action => action.atMs))
   const cueStretch = !context.diagramId && lastCue > 0 && lastCue < spokenMs * 0.75 ? (spokenMs * 0.75) / lastCue : 1
-  const visibleActions = beat.actions.filter(action => action._type === 'stroke' || action._type === 'text').length
+  const visibleActions = beat.actions.filter(action => action._type === 'stroke' || action._type === 'text' || action._type === 'arrow').length
   const actionBudget = Math.max(180, spokenMs * 0.75 / Math.max(1, visibleActions))
 
   for (const action of beat.actions) {
@@ -534,20 +622,55 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
         throw error
       }
       context.onAction?.(`Inked ${action.id}`)
+    } else if (action._type === 'arrow') {
+      // A labelled connector: the pen travels from tail to head, the shaft grows behind it, then its words appear.
+      const steps = 12
+      let progress = Math.max(0, Math.min(steps, Number(existing?.meta?.actionProgress) || 0))
+      const tail = { x: origin.x + action.from.x, y: origin.y + action.from.y }
+      const reach = { x: action.to.x - action.from.x, y: action.to.y - action.from.y }
+      // Never a zero-length shaft: the first frame already has a visible length, and the direction is kept.
+      const at = (fraction: number) => { const grown = Math.max(fraction, 1 / steps); return { x: reach.x * grown, y: reach.y * grown } }
+      await guideCursor(context.onCursor, cursorPoint, tail, context.signal)
+      cursorPoint = tail
+      const arrowProps = (fraction: number, labelled: boolean) => ({
+        kind: 'arc', start: { x: 0, y: 0 }, end: at(fraction), bend: action.bend * fraction,
+        color: action.color, labelColor: action.color, size: 'm', font: 'draw', dash: 'draw', fill: 'none',
+        arrowheadStart: action.both ? 'arrow' : 'none', arrowheadEnd: 'arrow', labelPosition: 0.5,
+        richText: toRichText(labelled ? action.label : ''),
+      })
+      if (!existing) editor.createShape({ id, type: 'arrow', x: tail.x, y: tail.y, meta: metaFor(action, 'interrupted', 0), props: arrowProps(1 / steps, false) } as any)
+      try {
+        const frameMs = Math.max(18, Math.min(60, actionBudget / steps)) * (pace / BEAT_PACE)
+        while (progress < steps) {
+          if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
+          progress += 1
+          const fraction = progress / steps
+          const done = progress === steps
+          cursorPoint = { x: tail.x + reach.x * fraction, y: tail.y + reach.y * fraction }
+          context.onCursor?.(cursorPoint)
+          editor.updateShape({ id, type: 'arrow', meta: metaFor(action, done ? 'complete' : 'interrupted', progress), props: arrowProps(fraction, done) } as any)
+          await wait(frameMs, context.signal)
+        }
+      } catch (error) {
+        editor.updateShape({ id, type: 'arrow', meta: metaFor(action, 'interrupted', progress) } as any)
+        throw error
+      }
+      context.onAction?.(`Drew the "${action.label}" arrow`)
     } else if (action._type === 'widget') {
       // A ready-made data widget: placed in one action, then revealed row by row / bar by bar while the tutor speaks.
       const steps = 10
+      const size = getWidgetSize(action, action.w, action.h)
       let progress = Math.max(0, Math.min(steps, Number(existing?.meta?.actionProgress) || 0))
       const corner = { x: origin.x + action.x, y: origin.y + action.y }
       await guideCursor(context.onCursor, cursorPoint, corner, context.signal)
       cursorPoint = corner
       const { _type, id: _actionId, atMs: _atMs, x: _x, y: _y, ...props } = action
-      if (!existing) editor.createShape({ id, type: 'lesson-widget', x: corner.x, y: corner.y, meta: metaFor(action, 'interrupted', 0), props: { ...props, shown: 0 } } as any)
+      if (!existing) editor.createShape({ id, type: 'lesson-widget', x: corner.x, y: corner.y, meta: metaFor(action, 'interrupted', 0), props: { ...props, ...size, shown: 0 } } as any)
       try {
         while (progress < steps) {
           if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
           progress += 1
-          cursorPoint = { x: corner.x + action.w * (progress / steps), y: corner.y + action.h * 0.6 }
+          cursorPoint = { x: corner.x + size.w * (progress / steps), y: corner.y + size.h * 0.6 }
           context.onCursor?.(cursorPoint)
           editor.updateShape({ id, type: 'lesson-widget', meta: metaFor(action, progress === steps ? 'complete' : 'interrupted', progress), props: { shown: progress / steps } } as any)
           await wait(90 * pace, context.signal)
@@ -640,11 +763,28 @@ export function getWhiteboardContext(editor: Editor, lessonId: string, checkpoin
   return JSON.stringify({ area: 'Latest tutor section; local coordinates 0..1200 x 0..700', tutor, learner, nearby })
 }
 
-export function getSelectionContext(editor: Editor): SelectionContext | null {
+function selectionTarget(editor: Editor) {
   const selectedBounds = editor.getSelectionPageBounds()
   const recentMark = !selectedBounds ? [...editor.getCurrentPageShapes()].reverse().find(shape => !shape.meta?.owner && ['draw', 'arrow', 'highlight'].includes(shape.type)) : undefined
   const bounds = selectedBounds || (recentMark ? editor.getShapePageBounds(recentMark) : null)
-  if (!bounds) return null
+  return bounds ? { bounds, mode: selectedBounds ? 'selection' as const : 'recent-user-mark' as const } : null
+}
+
+export async function getSelectionImage(editor: Editor): Promise<string | undefined> {
+  const target = selectionTarget(editor)
+  if (!target) return undefined
+  const { bounds } = target
+  const { url } = await editor.toImageDataUrl(editor.getCurrentPageShapes(), {
+    bounds, format: 'png', background: true, padding: 24, pixelRatio: 1,
+    scale: Math.min(2, 1200 / Math.max(bounds.w, 1), 900 / Math.max(bounds.h, 1)),
+  })
+  return url.startsWith('data:image/png;base64,') && url.length <= 2_800_000 ? url : undefined
+}
+
+export function getSelectionContext(editor: Editor): SelectionContext | null {
+  const target = selectionTarget(editor)
+  if (!target) return null
+  const { bounds } = target
   const shapes = editor.getCurrentPageShapes().filter(shape => {
     const shapeBounds = editor.getShapePageBounds(shape)
     return shapeBounds && shapeBounds.x < bounds.x + bounds.w && shapeBounds.x + shapeBounds.w > bounds.x &&
@@ -656,5 +796,5 @@ export function getSelectionContext(editor: Editor): SelectionContext | null {
     owner: typeof shape.meta?.owner === 'string' ? shape.meta.owner : 'user',
     bounds: (() => { const item = editor.getShapePageBounds(shape); return item ? { x: item.x, y: item.y, w: item.w, h: item.h } : { x: 0, y: 0, w: 0, h: 0 } })(),
   }))
-  return { mode: selectedBounds ? 'selection' : 'recent-user-mark', bounds: { x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }, shapes }
+  return { mode: target.mode, bounds: { x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }, shapes }
 }
