@@ -274,7 +274,10 @@ async def cors(request, handler):
         origin = request.headers.get("Origin", "")
         if not origin_allowed(origin):
             raise web.HTTPForbidden(text="Origin is not allowed.")
-        return web.Response(status=204, headers={"Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Max-Age": "600", "Vary": "Origin"})
+        headers = {"Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Max-Age": "600", "Vary": "Origin"}
+        if request.headers.get("Access-Control-Request-Private-Network") == "true":
+            headers["Access-Control-Allow-Private-Network"] = "true"
+        return web.Response(status=204, headers=headers)
     response = await handler(request)
     origin = request.headers.get("Origin", "")
     if origin_allowed(origin) and not response.prepared:
