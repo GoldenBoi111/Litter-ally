@@ -30,3 +30,56 @@ test('whiteboard ink begins with speech playback, not while TTS is still loading
   await tutor.speechQueue
   assert.deepEqual(events, ['audio', 'draw'])
 })
+
+test('each explanation turn starts one detailed diagram without waiting for it', async () => {
+  const requests = []
+  const tutor = new HybridTutor({
+    drawDiagram: (_index, request) => { requests.push(request); return new Promise(() => undefined) },
+    onStatus: () => undefined, onTranscript: () => undefined,
+  })
+  tutor.closed = false
+  tutor.queueTeachingBeat = async () => undefined
+  const beat = { beatId: 'idea', context: 'Explaining an idea', speech: 'Here is the idea.', pauseMs: 0, waitForLearner: true, actions: [] }
+  await tutor.executeTool('present_teaching_beat', JSON.stringify(beat))
+  await tutor.executeTool('present_teaching_beat', JSON.stringify({ ...beat, beatId: 'more' }))
+  assert.deepEqual(requests, [''])
+
+  tutor.turnId += 1
+  tutor.visualRequest = 'Why does this happen?'
+  await tutor.executeTool('present_teaching_beat', JSON.stringify({ ...beat, beatId: 'answer' }))
+  await tutor.executeTool('draw_lesson_diagram', JSON.stringify({ diagramIndex: 0, request: 'duplicate' }))
+  assert.deepEqual(requests, ['', 'Why does this happen?'])
+
+  tutor.respond = async () => undefined
+  tutor.acceptTranscript('Could you explain the next part?', tutor.turnId)
+  await tutor.executeTool('present_teaching_beat', JSON.stringify({ ...beat, beatId: 'next_answer' }))
+  assert.deepEqual(requests, ['', 'Why does this happen?', 'Could you explain the next part?'])
+})
+
+test('a learner question sends the marked canvas crop to the voice tutor', async () => {
+  let input
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (_url, options) => {
+    input = JSON.parse(options.body).input
+    return new Response('data: {"type":"output","output":[]}\n\n', { headers: { 'content-type': 'text/event-stream' } })
+  }
+  try {
+    const tutor = new HybridTutor({
+      getSelection: () => ({ mode: 'recent-user-mark', bounds: { x: 10, y: 20, w: 100, h: 70 }, shapes: [{ id: 'circle', type: 'draw', text: '', owner: 'user', bounds: { x: 10, y: 20, w: 100, h: 70 } }] }),
+      getSelectionImage: async () => 'data:image/png;base64,AAAA',
+      getWhiteboardContext: () => '{}',
+      onStatus: () => undefined, onTranscript: () => undefined,
+    })
+    tutor.closed = false
+    tutor.title = 'Lesson'
+    tutor.brief = { checkpoint: { title: 'Concept' } }
+    tutor.input = [{ type: 'message', role: 'user', content: 'What is this?' }]
+    tutor.selectionPending = true
+    await tutor.respond()
+    const reference = input.find(item => Array.isArray(item.content) && item.content.some(part => part.type === 'input_image'))
+    assert.ok(reference, 'the voice request includes the circled region')
+    assert.equal(reference.content.find(part => part.type === 'input_image').image_url, 'data:image/png;base64,AAAA')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
