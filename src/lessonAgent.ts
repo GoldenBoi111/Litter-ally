@@ -515,6 +515,14 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
   let cursorPoint: AgentCursorPoint | null = null
   let previousTextEnd: AgentCursorPoint | null = null
   const renderedTextEnd = (shapeId: TLShapeId, fallback: AgentCursorPoint) => {
+    const text = editor.getContainer().querySelector<HTMLElement>(`[data-shape-id="${shapeId}"] .tl-rich-text`)
+    if (text?.textContent) {
+      const range = text.ownerDocument.createRange()
+      range.selectNodeContents(text)
+      range.collapse(false)
+      const rect = range.getBoundingClientRect()
+      if (rect.height) return editor.screenToPage({ x: rect.right, y: rect.top + rect.height / 2 })
+    }
     const shape = editor.getShape(shapeId)
     const bounds = shape && editor.getShapePageBounds(shape)
     return bounds ? { x: bounds.x + bounds.w, y: bounds.y + bounds.h / 2 } : fallback
@@ -707,6 +715,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
           if (context.signal.aborted) throw new DOMException('Lesson paused.', 'AbortError')
           progress = Math.min(action.text.length, progress + step)
           editor.updateShape({ id, type: 'text', meta: metaFor(action, progress === action.text.length ? 'complete' : 'interrupted', progress), props: { richText: toRichText(action.text.slice(0, progress)), size, scale: 3, font: 'draw', autoSize: true } } as any)
+          await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
           cursorPoint = textCursor()
           previousTextEnd = cursorPoint
           context.onCursor?.(cursorPoint)
