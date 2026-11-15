@@ -182,6 +182,12 @@ const ACTION_DELAY_MS = 90
 export const BEAT_PACE = 1.6
 /** Local coordinate space the model draws in for each beat (matches the server prompt). */
 const DRAWING_AREA = { w: 1200, h: 700 }
+/** Each concept gets its own 2400-pixel column: source material on the left, the tutor's region beside it. */
+const CONCEPT_COLUMN = 2400
+const TUTOR_COLUMN_OFFSET = 1100
+const CONCEPT_TOP = 220
+/** Clear space kept around a concept's drawing region, so a finished concept never bleeds into the next one. */
+const REGION_MARGIN = 48
 /** Rough speaking rate of the tutor voice, used to spread a beat's ink across its narration. */
 const SPOKEN_MS_PER_WORD = 330
 export const DIAGRAM_PACE = 1.8
@@ -366,6 +372,68 @@ function clearBeatOrigin(editor: Editor, beat: Pick<TeachingBeat, 'actions'>, st
   return origin
 }
 
+/** Every mark the tutor made for one concept: ink, lettering, widgets, diagrams and the material it brought in. */
+export function conceptMarks(editor: Editor, lessonId: string, checkpointIndex: number) {
+  return editor.getCurrentPageShapes().filter(shape =>
+    (shape.meta?.owner === 'agent' || shape.meta?.owner === 'source') &&
+    shape.meta?.checkpointId === String(checkpointIndex) &&
+    (shape.meta?.owner !== 'agent' || shape.meta?.lessonId === lessonId))
+}
+
+/** Restarting a concept wipes everything the tutor put up for it; the learner's own marks are never touched. */
+export function clearConceptMarks(editor: Editor, lessonId: string, checkpointIndex: number) {
+  const marks = conceptMarks(editor, lessonId, checkpointIndex)
+  if (marks.length) editor.deleteShapes(marks.map(shape => shape.id))
+  return marks.length
+}
+
+/** True when a whole drawing region, plus its margin, holds nothing already. */
+function regionIsClear(editor: Editor, origin: { x: number; y: number }, keep: Set<string>) {
+  const area = {
+    minX: origin.x - REGION_MARGIN, minY: origin.y - REGION_MARGIN,
+    maxX: origin.x + DRAWING_AREA.w + REGION_MARGIN, maxY: origin.y + DRAWING_AREA.h + REGION_MARGIN,
+  }
+  return !editor.getCurrentPageShapes().some(shape => {
+    if (keep.has(shape.id)) return false
+    const bounds = editor.getShapePageBounds(shape)
+    return !!bounds && bounds.x < area.maxX && bounds.x + bounds.w > area.minX && bounds.y < area.maxY && bounds.y + bounds.h > area.minY
+  })
+}
+
+/**
+ * The clear patch of board a concept works in: the region it already started, or — for a concept with nothing
+ * on the board yet — a free region in its own column, stepping down and then across until nothing is in the way.
+ */
+export function conceptRegion(editor: Editor, lessonId: string, checkpointIndex: number) {
+  const started = conceptMarks(editor, lessonId, checkpointIndex)
+    .filter(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number')
+  if (started.length) return {
+    x: Math.min(...started.map(shape => shape.meta.originX as number)),
+    y: Math.min(...started.map(shape => shape.meta.originY as number)),
+  }
+  const keep = new Set(conceptMarks(editor, lessonId, checkpointIndex).map(shape => shape.id))
+  const stepY = DRAWING_AREA.h + REGION_MARGIN * 2
+  for (let column = 0; column < 64; column++) {
+    for (let row = 0; row < 8; row++) {
+      const origin = { x: checkpointIndex * CONCEPT_COLUMN + TUTOR_COLUMN_OFFSET + column * CONCEPT_COLUMN, y: CONCEPT_TOP + row * stepY }
+      if (regionIsClear(editor, origin, keep)) return origin
+    }
+  }
+  // A board this full still gets a fresh start: below everything on it.
+  const bottoms = editor.getCurrentPageShapes().flatMap(shape => {
+    const bounds = editor.getShapePageBounds(shape)
+    return bounds ? [bounds.y + bounds.h] : []
+  })
+  return { x: checkpointIndex * CONCEPT_COLUMN + TUTOR_COLUMN_OFFSET, y: bottoms.length ? Math.max(...bottoms) + REGION_MARGIN * 2 : CONCEPT_TOP }
+}
+
+/** Bring a concept's region into view, so a restarted or freshly opened concept starts on visibly blank board. */
+export function focusConceptRegion(editor: Editor, lessonId: string, checkpointIndex: number) {
+  const origin = conceptRegion(editor, lessonId, checkpointIndex)
+  editor.zoomToBounds({ x: origin.x, y: origin.y, w: DRAWING_AREA.w, h: DRAWING_AREA.h }, { animation: { duration: 350 }, inset: 48 })
+  return origin
+}
+
 function beatOrigin(editor: Editor, beat: TeachingBeat, lessonId: string, checkpointIndex: number) {
   const shapes = editor.getCurrentPageShapes().filter(shape => shape.meta?.owner === 'agent' && shape.meta?.lessonId === lessonId && shape.meta?.checkpointId === String(checkpointIndex))
   const sameBeat = shapes.find(shape => shape.meta?.beatId === beat.beatId)
@@ -377,9 +445,12 @@ function beatOrigin(editor: Editor, beat: TeachingBeat, lessonId: string, checkp
     const latest = [...shapes].reverse().find(shape => typeof shape.meta?.originX === 'number' && typeof shape.meta?.originY === 'number')
     if (latest) return clearBeatOrigin(editor, beat, { x: latest.meta.originX as number, y: latest.meta.originY as number }, false)
   }
+  // A new idea in a concept already under way stacks below that concept's work; a concept with nothing on the
+  // board yet starts in a region that is clear of every other mark, so finished concepts are never drawn over.
+  const region = conceptRegion(editor, lessonId, checkpointIndex)
   const prior = shapes.filter(shape => !shape.meta?.diagramId).flatMap(shape => { const bounds = editor.getShapePageBounds(shape); return bounds ? [bounds.y + bounds.h] : [] })
   const top = Math.min(0, ...beatMarkBounds(beat).map(mark => mark.y))
-  return clearBeatOrigin(editor, beat, { x: checkpointIndex * 2400 + 1100, y: prior.length ? Math.max(...prior) + 60 - top : 220 }, true)
+  return clearBeatOrigin(editor, beat, { x: region.x, y: prior.length ? Math.max(...prior) + 60 - top : region.y }, true)
 }
 
 function smoothStrokePoints(points: Array<{ x: number; y: number }>, closed: boolean) {
