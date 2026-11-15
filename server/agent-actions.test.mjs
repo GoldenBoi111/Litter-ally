@@ -77,6 +77,27 @@ test('rejects unsafe, unbounded, and duplicate teaching actions', () => {
   assert.throws(() => validateTeachingBeat({ ...validBeat, speech: 'x'.repeat(601) }), /invalid teaching beat/)
 })
 
+const arrowBeat = arrow => ({
+  beatId: 'api_round_trip', context: 'Show the request and the response.', speech: 'The app asks the server for the list, and the server answers.',
+  pauseMs: 0, waitForLearner: true, placement: 'continue', anchorBeatId: '',
+  actions: [{ _type: 'arrow', id: 'request', atMs: 0, from: { x: 220, y: 200 }, to: { x: 640, y: 200 }, label: 'GET /users request', color: 'blue', bend: 0, both: false, ...arrow }],
+})
+
+test('accepts labelled arrows for a request and its bent return path', () => {
+  const beat = arrowBeat()
+  assert.deepEqual(validateTeachingBeat(structuredClone(beat)), beat)
+  const back = arrowBeat({ id: 'response', from: { x: 640, y: 230 }, to: { x: 220, y: 230 }, label: '200 OK + JSON list', bend: 90 })
+  assert.deepEqual(validateTeachingBeat(structuredClone(back)), back)
+})
+
+test('an arrow must say what travels along it, and must go somewhere', () => {
+  assert.throws(() => validateTeachingBeat(arrowBeat({ label: '' })), /invalid labelled arrow/)
+  assert.throws(() => validateTeachingBeat(arrowBeat({ label: '   ' })), /invalid labelled arrow/)
+  assert.throws(() => validateTeachingBeat(arrowBeat({ to: { x: 220, y: 200 } })), /invalid labelled arrow/)
+  assert.throws(() => validateTeachingBeat(arrowBeat({ to: { x: 1400, y: 200 } })), /invalid labelled arrow/)
+  assert.throws(() => validateTeachingBeat(arrowBeat({ bend: 900 })), /invalid labelled arrow/)
+})
+
 const widgetBeat = widget => ({ beatId: 'data', context: 'Show the figures.', speech: 'Here are the numbers from the study.', pauseMs: 0, waitForLearner: true, placement: 'new-section', anchorBeatId: '', actions: [{ _type: 'widget', id: 'chart', atMs: 0, x: 40, y: 40, w: 520, h: 320, title: 'Results', labels: [], series: [], rows: [], unit: '', ...widget }] })
 
 test('accepts every widget kind filled in its documented shape', () => {
