@@ -219,6 +219,8 @@ export function Board({ canvasKey, papers, summaries, synthesis, hiddenConnectio
           if (import.meta.env.DEV) Object.assign(window, { boardEditor: ed }) // for local UI checks
         }}
       />
+      {/* One rail stacks the board's own chrome in a column, so these panels can never land on each other. */}
+      <div className="board-rail">
       {papers.length > 0 && <button className="board-fit" onClick={() => editor?.zoomToFit({ animation: { duration: 320 } })}>Fit board</button>}
       {(analysisError || analysisStatus) && <div className="board-analysis" role="status">{analysisError ? <>{analysisError} <button onClick={onRetry}>Retry connections</button></> : analysisStatus}</div>}
       {synthesis && <details className="board-connections">
@@ -237,6 +239,7 @@ export function Board({ canvasKey, papers, summaries, synthesis, hiddenConnectio
         })}</ul>}
         {hiddenConnectionPairs.length > 0 && <button className="board-restore" onClick={onRestoreHiddenConnections}>Restore {hiddenConnectionPairs.length} hidden {hiddenConnectionPairs.length === 1 ? 'connection' : 'connections'}</button>}
       </details>}
+      </div>
       {!papers.length && (
         <div className="board-empty">
           <p>Your board is empty.</p>
