@@ -30,7 +30,7 @@ function zipEntries(buffer) {
     const name = buffer.toString('utf8', offset + 46, offset + 46 + nameLength)
     offset += 46 + nameLength + extraLength + commentLength
     if (flags & 1) throw new Error('Password-protected office files are not supported.')
-    if (!/^(?:xl|ppt)\//.test(name) || name.endsWith('/')) continue
+    if (!/^(?:xl|ppt|word)\//.test(name) || name.endsWith('/')) continue
     const media = /^ppt\/media\//.test(name)
     if (![0, 8].includes(method) || uncompressedSize > (media ? MAX_MEDIA_BYTES : MAX_EXTRACTED_BYTES)) throw new Error('This office file uses an unsupported or oversized compression method.')
     if (media) mediaBytes += uncompressedSize
@@ -80,8 +80,29 @@ export function extractPowerPointSlideImage(buffer, fileName, slideNumber) {
   return mimeType ? { mimeType, data: data.toString('base64') } : null
 }
 
-function xmlText(value) {
-  return value.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&').trim()
+function xmlText(value, trim = true) {
+  const text = value.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+  return trim ? text.trim() : text
+}
+
+function docxSegments(entries, fileName) {
+  const document = entries.get('word/document.xml')
+  if (!document) throw new Error('This Word document has no readable body.')
+  const paragraphs = [...document.matchAll(/<w:p(?:\s[^>]*)?>([\s\S]*?)<\/w:p>/g)]
+    .map(match => [...match[1].matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)].map(text => xmlText(text[1], false)).join('').trim())
+    .filter(Boolean)
+  const segments = []
+  let chunk = ''
+  for (const paragraph of paragraphs) {
+    if (chunk && chunk.length + paragraph.length > 10_000) {
+      segments.push({ id: `${fileName}:section:${segments.length + 1}`, text: chunk, locator: { kind: 'section', heading: `Section ${segments.length + 1}` } })
+      chunk = ''
+    }
+    chunk += `${chunk ? '\n' : ''}${paragraph}`
+  }
+  if (chunk) segments.push({ id: `${fileName}:section:${segments.length + 1}`, text: chunk, locator: { kind: 'section', heading: `Section ${segments.length + 1}` } })
+  if (segments.length > 300) throw new Error('This Word document exceeds the 300-section limit.')
+  return segments
 }
 
 function pptxSegments(entries, fileName) {
@@ -144,9 +165,9 @@ function xlsxSegments(entries, fileName) {
 export function extractOfficeSource(buffer, fileName) {
   const entries = zipEntries(buffer)
   const extension = fileName.split('.').pop()?.toLowerCase()
-  const kind = extension === 'pptx' ? 'slides' : extension === 'xlsx' ? 'spreadsheet' : null
-  if (!kind) throw new Error('Only PowerPoint (.pptx) and Excel (.xlsx) office files are supported.')
-  const segments = kind === 'slides' ? pptxSegments(entries, fileName) : xlsxSegments(entries, fileName)
+  const kind = extension === 'pptx' ? 'slides' : extension === 'xlsx' ? 'spreadsheet' : extension === 'docx' ? 'text' : null
+  if (!kind) throw new Error('Only Word (.docx), PowerPoint (.pptx), and Excel (.xlsx) office files are supported.')
+  const segments = extension === 'docx' ? docxSegments(entries, fileName) : kind === 'slides' ? pptxSegments(entries, fileName) : xlsxSegments(entries, fileName)
   if (!segments.some(segment => segment.text.trim())) throw new Error('No readable text was found in this office file.')
   const title = fileName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim()
   const text = segments.map((segment, index) => `[Page ${index + 1} of ${segments.length}]\n${segment.text}`).join('\n\n')
