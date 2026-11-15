@@ -276,7 +276,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
   const { x: xOffset, y: yOffset } = clearBeatOrigin(editor, {
     actions: [{ _type: 'stroke', id: 'area', atMs: 0, points: [{ x: 0, y: 0 }, { x: columns * cell.w, y: Math.ceil(nodes.length / columns) * cell.h }], color: 'black', size: 'm', closed: false }],
   }, boardStart, true)
-  const created = new Map<string, { id: TLShapeId; point: AgentCursorPoint }>()
+  const created = new Map<string, { id: TLShapeId; point: AgentCursorPoint; bounds: { x: number; y: number; w: number; h: number } }>()
   const createdIds: TLShapeId[] = []
   let cursorPoint: AgentCursorPoint | null = null
   const generationId = crypto.randomUUID()
@@ -289,7 +289,7 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
     if (action._type === 'create') {
       const row = Math.floor(nodeIndex / columns)
       const offsetColumn = nodeIndex % columns
-      const column = ['flow', 'timeline'].includes(context.diagramKind) && row % 2 ? columns - 1 - offsetColumn : offsetColumn
+      const column = offsetColumn
       const x = xOffset + column * cell.w + 120
       const y = yOffset + row * cell.h + 120
       const point = { x: x + 330, y: y + 180 }
@@ -306,7 +306,9 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
           richText: toRichText(action.text), font: 'sans', align: 'middle', verticalAlign: 'middle',
         },
       } as any)
-      created.set(action.id, { id, point })
+      const shape = editor.getShape(id)
+      const pageBounds = shape && editor.getShapePageBounds(shape)
+      created.set(action.id, { id, point, bounds: pageBounds ? { x: pageBounds.x, y: pageBounds.y, w: pageBounds.w, h: pageBounds.h } : { x, y, w: 660, h: 360 } })
       createdIds.push(id)
       context.onAction?.(`Drew ${action.text || action.shape}`)
     } else if (action._type === 'connect') {
@@ -318,19 +320,25 @@ export async function applyDiagramPlan(editor: Editor, plan: DiagramPlan, contex
       const horizontal = Math.abs(dx) >= Math.abs(dy)
       const fromAnchor = horizontal ? { x: dx >= 0 ? 1 : 0, y: 0.5 } : { x: 0.5, y: dy >= 0 ? 1 : 0 }
       const toAnchor = horizontal ? { x: dx >= 0 ? 0 : 1, y: 0.5 } : { x: 0.5, y: dy >= 0 ? 0 : 1 }
+      const start = horizontal
+        ? { x: from.point.x + (dx >= 0 ? from.bounds.w / 2 : -from.bounds.w / 2), y: from.point.y }
+        : { x: from.point.x, y: from.point.y + (dy >= 0 ? from.bounds.h / 2 : -from.bounds.h / 2) }
+      const end = horizontal
+        ? { x: to.point.x + (dx >= 0 ? -to.bounds.w / 2 : to.bounds.w / 2), y: to.point.y }
+        : { x: to.point.x, y: to.point.y + (dy >= 0 ? -to.bounds.h / 2 : to.bounds.h / 2) }
       editor.centerOnPoint(from.point, { animation: { duration: 220 } })
       await guideCursor(context.onCursor, cursorPoint, from.point, context.signal)
       cursorPoint = from.point
       await guideCursor(context.onCursor, cursorPoint, to.point, context.signal)
       cursorPoint = to.point
       editor.createShape({
-        id, type: 'arrow', x: from.point.x, y: from.point.y, meta,
-        props: { kind: 'elbow', start: { x: 0, y: 0 }, end: { x: to.point.x - from.point.x, y: to.point.y - from.point.y }, color: action.color, size: 'm', scale: 1, richText: toRichText(action.label), arrowheadEnd: 'arrow' },
+        id, type: 'arrow', x: start.x, y: start.y, meta,
+        props: { kind: 'arc', start: { x: 0, y: 0 }, end: { x: end.x - start.x, y: end.y - start.y }, bend: 0, color: action.color, size: 'm', scale: 1, richText: toRichText(action.label), arrowheadEnd: 'arrow' },
       } as any)
       for (const [terminal, target, normalizedAnchor] of [['start', from.id, fromAnchor], ['end', to.id, toAnchor]] as const) {
         editor.createBinding({
           type: 'arrow', fromId: id, toId: target,
-          props: { terminal, isExact: false, isPrecise: false, normalizedAnchor, snap: 'none' },
+          props: { terminal, isExact: false, isPrecise: true, normalizedAnchor, snap: 'none' },
         })
       }
       createdIds.push(id)
@@ -534,15 +542,14 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
   const pace = context.pace ?? BEAT_PACE
   const beat = readTeachingBeat(input)
   const origin = context.origin || beatOrigin(editor, beat, context.lessonId, context.checkpointIndex)
-  const textBoxes = new Map<string, { x: number; y: number; w: number; h: number }>()
   const textPlanned = new Map<string, { x: number; y: number; w: number; h: number }>()
   const ownActionIds = new Set(beat.actions.map(action => String(createShapeId(`lesson-${context.lessonId}-${context.checkpointIndex}-${beat.beatId}-${action.id}`))))
   const occupiedTextLayout = editor.getCurrentPageShapes().filter(shape => !ownActionIds.has(shape.id)).flatMap(shape => {
     const bounds = editor.getShapePageBounds(shape)
     return bounds ? [{ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }] : []
   })
-  for (const action of context.diagramId ? [] : beat.actions) {
-    if (action._type !== 'text') continue
+  const textActions = context.diagramId ? [] : beat.actions.filter((action): action is Extract<TeachingAction, { _type: 'text' }> => action._type === 'text').sort((a, b) => a.y - b.y || a.x - b.x)
+  for (const action of textActions) {
     const mark = beatMarkBounds({ actions: [action] })[0]
     const shapeId = createShapeId(`lesson-${context.lessonId}-${context.checkpointIndex}-${beat.beatId}-${action.id}`)
     const existing = editor.getShape(shapeId)
@@ -550,14 +557,12 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
     const box = bounds ?? { x: origin.x + mark.x, y: origin.y + mark.y, w: mark.w, h: mark.h }
     if (!existing) box.y = clearVerticalOverlap(box, occupiedTextLayout)
     textPlanned.set(action.id, box)
-    textBoxes.set(action.id, box)
     occupiedTextLayout.push(box)
   }
   const startedAt = performance.now()
   const completedIds: TLShapeId[] = []
   let cursorPoint: AgentCursorPoint | null = null
   let previousTextId: TLShapeId | null = null
-  let previousTextPlanned: AgentCursorPoint | null = null
   const renderedTextEnd = (shapeId: TLShapeId, fallback: AgentCursorPoint) => {
     const text = editor.getContainer().querySelector<HTMLElement>(`[data-shape-id="${shapeId}"] .tl-rich-text`)
     if (text?.textContent) {
@@ -588,6 +593,14 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       result = { x: point.x + actual.x - planned.x, y: point.y + actual.y - planned.y }
     }
     return result
+  }
+  const textBoundsFor = (action: Extract<TeachingAction, { _type: 'text' }>) => {
+    const id = createShapeId(`lesson-${context.lessonId}-${context.checkpointIndex}-${beat.beatId}-${action.id}`)
+    const shape = editor.getShape(id)
+    const bounds = shape && editor.getShapePageBounds(shape)
+    if (bounds) return { x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }
+    const planned = textPlanned.get(action.id)
+    return planned ? { x: planned.x + 8, y: planned.y + 8, w: Math.max(0, planned.w - 16), h: Math.max(0, planned.h - 16) } : undefined
   }
   const metaFor = (action: TeachingAction, state: 'interrupted' | 'complete', progress: number) => ({
     owner: 'agent', lessonId: context.lessonId, checkpointId: String(context.checkpointIndex), beatId: beat.beatId,
@@ -667,11 +680,8 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
     const existing = editor.getShape(id)
     if (action._type === 'text') {
       previousTextId = id
-      const planned = textPlanned.get(action.id)
-      previousTextPlanned = planned ? { x: planned.x, y: planned.y + 8 } : { x: origin.x + action.x, y: origin.y + action.y }
     } else if (action._type !== 'arrow') {
       previousTextId = null
-      previousTextPlanned = null
     }
     if (existing?.meta?.actionState === 'complete') { completedIds.push(id); continue }
 
@@ -714,16 +724,27 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       const steps = 12
       let progress = Math.max(0, Math.min(steps, Number(existing?.meta?.actionProgress) || 0))
       const modelTail = { x: origin.x + action.from.x, y: origin.y + action.from.y }
-      const target = relocatedTextPoint({ x: origin.x + action.to.x, y: origin.y + action.to.y })
       const previousText = previousTextId && editor.getShape(previousTextId)
       const previousTextAction = previousTextId && beat.actions.find(item => item._type === 'text' && createShapeId(`lesson-${context.lessonId}-${context.checkpointIndex}-${beat.beatId}-${item.id}`) === previousTextId)
-      const textBounds = previousTextAction?._type === 'text' ? textBoxes.get(previousTextAction.id) : undefined
-      const tail = textBounds && previousText && previousTextPlanned &&
-        modelTail.x >= previousTextPlanned.x - 48 && modelTail.x <= previousTextPlanned.x + textBounds.w + 48 &&
-        modelTail.y >= previousTextPlanned.y - 48 && modelTail.y <= previousTextPlanned.y + textBounds.h + 48
-        ? renderedTextEnd(previousTextId!, modelTail) : modelTail
+      const destinationTextAction = beat.actions.slice(beat.actions.indexOf(action) + 1).find((item): item is Extract<TeachingAction, { _type: 'text' }> => item._type === 'text')
+      const sourceBounds = previousTextAction?._type === 'text' ? textBoundsFor(previousTextAction) : undefined
+      const destinationBounds = destinationTextAction && textBoundsFor(destinationTextAction)
+      let tail = modelTail
+      let target = relocatedTextPoint({ x: origin.x + action.to.x, y: origin.y + action.to.y })
+      let bend = action.bend
+      if (sourceBounds && destinationBounds && previousTextId && previousText) {
+        const dx = destinationBounds.x + destinationBounds.w / 2 - (sourceBounds.x + sourceBounds.w / 2)
+        const dy = destinationBounds.y + destinationBounds.h / 2 - (sourceBounds.y + sourceBounds.h / 2)
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          tail = dx >= 0 ? renderedTextEnd(previousTextId, modelTail) : { x: sourceBounds.x, y: sourceBounds.y + sourceBounds.h / 2 }
+          target = { x: dx >= 0 ? destinationBounds.x - 12 : destinationBounds.x + destinationBounds.w + 12, y: destinationBounds.y + destinationBounds.h / 2 }
+        } else {
+          tail = { x: sourceBounds.x + sourceBounds.w / 2, y: dy >= 0 ? sourceBounds.y + sourceBounds.h : sourceBounds.y }
+          target = { x: destinationBounds.x + destinationBounds.w / 2, y: dy >= 0 ? destinationBounds.y - 12 : destinationBounds.y + destinationBounds.h + 12 }
+        }
+        bend = 0
+      }
       previousTextId = null
-      previousTextPlanned = null
       const reach = { x: target.x - tail.x, y: target.y - tail.y }
       // Never a zero-length shaft: the first frame already has a visible length, and the direction is kept.
       const at = (fraction: number) => { const grown = Math.max(fraction, 1 / steps); return { x: reach.x * grown, y: reach.y * grown } }
@@ -731,7 +752,7 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       await guideCursor(context.onCursor, cursorPoint, tail, context.signal)
       cursorPoint = tail
       const arrowProps = (fraction: number, labelled: boolean) => ({
-        kind: 'arc', start: { x: 0, y: 0 }, end: at(fraction), bend: action.bend * fraction,
+        kind: 'arc', start: { x: 0, y: 0 }, end: at(fraction), bend: bend * fraction,
         color: action.color, labelColor: action.color, size: 'm', scale: 1, font: 'draw', dash: 'draw', fill: 'none',
         arrowheadStart: action.both ? 'arrow' : 'none', arrowheadEnd: 'arrow', labelPosition: 0.5,
         richText: toRichText(labelled ? action.label : ''),
@@ -791,9 +812,6 @@ export async function applyTeachingBeat(editor: Editor, input: TeachingBeat, con
       const size = action.size === 's' || action.size === 'm' ? 'l' : action.size
       if (!existing) {
         editor.createShape({ id, type: 'text', x: textPoint.x, y: textPoint.y, meta: metaFor(action, 'interrupted', 0), props: { richText: toRichText(action.text), color: action.color, size, scale: 3, font: 'draw', autoSize: true } } as any)
-        const placed = editor.getShape(id)
-        const placedBounds = placed && editor.getShapePageBounds(placed)
-        if (placedBounds) textBoxes.set(action.id, placedBounds)
         editor.updateShape({ id, type: 'text', props: { richText: toRichText('') } } as any)
       } else editor.updateShape({ id, type: 'text', props: { size, scale: 3, font: 'draw', autoSize: true } } as any)
       const placedText = editor.getShape(id)
