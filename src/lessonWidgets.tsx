@@ -29,7 +29,7 @@ export type LessonWidgetShape = TLShape<'lesson-widget'>
 const PENS: PenName[] = ['blue', 'redfelt', 'greenfelt', 'orange']
 const TINTS: PaintKey[] = ['sky', 'tomato', 'grass', 'tangerine', 'grape', 'lemon', 'teal', 'bubblegum']
 const STOCK: Record<WidgetKind, StockName> = { table: 'ledger', bar: 'graph', line: 'graph', pie: 'paper', stats: 'index-card', timeline: 'paper' }
-const HEADER = 46
+const HEADER = 54
 
 /** One hand-inked stroke from the Loose Leaf pen engine. Seeded, so it looks the same on every render. */
 function InkStroke({ points, pen = 'ink', seed, width }: { points: Pt[]; pen?: PenName; seed: string; width?: number }) {
@@ -47,7 +47,7 @@ function Legend({ series }: { series: WidgetData['series'] }) {
 
 /** Bar and line charts share axes: categories along x, value scale from 0 (or the data minimum, if negative) to the maximum. */
 function Chart({ data, w, h, shown, seed }: { data: WidgetData; w: number; h: number; shown: number; seed: string }) {
-  const pad = { l: 46, r: 14, t: 10, b: 30 }
+  const pad = { l: 48, r: 14, t: 10, b: 34 }
   const values = data.series.flatMap(s => s.values)
   const min = Math.min(0, ...values)
   const max = Math.max(...values, min + 1)
@@ -63,7 +63,7 @@ function Chart({ data, w, h, shown, seed }: { data: WidgetData; w: number; h: nu
       {ticks.map((t, i) => <text key={i} x={pad.l - 6} y={y(t) + 4} textAnchor="end" className="widget-tick">{fmt(+t.toFixed(2), data.unit)}</text>)}
       <InkStroke seed={`${seed}-y`} points={[[pad.l, pad.t - 4], [pad.l, y(min)]]} />
       <InkStroke seed={`${seed}-x`} points={[[pad.l, y(Math.max(0, min))], [w - pad.r + 4, y(Math.max(0, min))]]} />
-      {data.labels.map((label, i) => <text key={i} x={pad.l + slot * (i + 0.5)} y={h - 10} textAnchor="middle" className="widget-tick">{label}</text>)}
+      {data.labels.map((label, i) => <text key={i} x={pad.l + slot * (i + 0.5)} y={h - 12} textAnchor="middle" className="widget-tick"><title>{label}</title>{label.length > 7 ? `${label.slice(0, 6)}…` : label}</text>)}
       {data.kind === 'bar' ? data.series.map((s, si) => {
         const gap = 4
         const barW = (slot * 0.7 - gap * (data.series.length - 1)) / data.series.length
@@ -72,10 +72,11 @@ function Chart({ data, w, h, shown, seed }: { data: WidgetData; w: number; h: nu
           const top = y(Math.max(v, 0)), bottom = y(Math.min(v, 0))
           return (
             <g key={`${si}-${i}`}>
+              <title>{`${s.name} · ${data.labels[i]}: ${fmt(v, data.unit)}`}</title>
               <rect x={x0} y={top} width={barW} height={Math.max(1, bottom - top)} fill={paint(TINTS[si])} opacity={0.35} />
               {([[[x0, bottom], [x0, top]], [[x0, top], [x0 + barW, top]], [[x0 + barW, top], [x0 + barW, bottom]]] as Pt[][]).map((side, k) =>
                 <InkStroke key={k} seed={`${seed}-b${si}-${i}-${k}`} pen={PENS[si % PENS.length]} points={side} width={0.8} />)}
-              <text x={x0 + barW / 2} y={top - 5} textAnchor="middle" className="widget-value">{fmt(v, data.unit)}</text>
+              {data.series.length === 1 && data.labels.length <= 6 && <text x={x0 + barW / 2} y={top - 5} textAnchor="middle" className="widget-value">{fmt(v, data.unit)}</text>}
             </g>
           )
         })
@@ -84,7 +85,7 @@ function Chart({ data, w, h, shown, seed }: { data: WidgetData; w: number; h: nu
         return (
           <g key={si}>
             {pts.length > 1 && <InkStroke seed={`${seed}-l${si}`} pen={PENS[si % PENS.length]} points={pts} />}
-            {pts.map(([px, py], i) => <circle key={i} cx={px} cy={py} r={3.5} fill={paint(TINTS[si])} stroke={paint('ink')} strokeWidth={1} />)}
+            {pts.map(([px, py], i) => <circle key={i} cx={px} cy={py} r={4} fill={paint(TINTS[si])} stroke={paint('ink')} strokeWidth={1}><title>{`${s.name} · ${data.labels[i]}: ${fmt(s.values[i], data.unit)}`}</title></circle>)}
           </g>
         )
       })}
@@ -95,8 +96,9 @@ function Chart({ data, w, h, shown, seed }: { data: WidgetData; w: number; h: nu
 function Pie({ data, w, h, shown, seed }: { data: WidgetData; w: number; h: number; shown: number; seed: string }) {
   const values = data.series[0]?.values || []
   const total = values.reduce((sum, v) => sum + v, 0) || 1
-  const r = Math.min(h / 2 - 8, w * 0.28)
-  const cx = r + 12, cy = h / 2
+  const pieWidth = Math.min(h, w * 0.42)
+  const r = Math.max(0, Math.min(h / 2 - 8, pieWidth / 2 - 6))
+  const cx = pieWidth / 2, cy = h / 2
   const visible = reveal(shown, values.length)
   let angle = -Math.PI / 2
   const wedges = values.map((v, i) => {
@@ -108,7 +110,7 @@ function Pie({ data, w, h, shown, seed }: { data: WidgetData; w: number; h: numb
   const circle: Pt[] = Array.from({ length: 49 }, (_, k) => at(-Math.PI / 2 + (k / 48) * Math.PI * 2))
   return (
     <div className="widget-pie">
-      <svg width={r * 2 + 24} height={h} viewBox={`0 0 ${r * 2 + 24} ${h}`}>
+      <svg className="widget-pie-chart" width={pieWidth} height={h} viewBox={`0 0 ${pieWidth} ${h}`}>
         {wedges.slice(0, visible).map(({ i, from, to }) => {
           const [x1, y1] = at(from), [x2, y2] = at(to)
           return <path key={i} d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${to - from > Math.PI ? 1 : 0} 1 ${x2},${y2} Z`} fill={paint(TINTS[i % TINTS.length])} opacity={0.5} />
@@ -116,30 +118,34 @@ function Pie({ data, w, h, shown, seed }: { data: WidgetData; w: number; h: numb
         {wedges.slice(0, visible).map(({ i, from }) => <InkStroke key={i} seed={`${seed}-r${i}`} points={[[cx, cy], at(from)]} width={0.7} />)}
         <InkStroke seed={`${seed}-c`} points={circle} />
       </svg>
-      <ul className="widget-keys">
+      <div className="widget-pie-keys" role="region" aria-label={`Pie chart legend: ${data.title}`} tabIndex={0}><ul className="widget-keys">
         {wedges.map(({ i, v }) => <li key={i} style={{ opacity: i < visible ? 1 : 0 }}><i style={{ background: paint(TINTS[i % TINTS.length]) }} />{data.labels[i]} <b>{Math.round((v / total) * 100)}%</b></li>)}
-      </ul>
+      </ul></div>
     </div>
   )
 }
 
 function WidgetBody({ data, w, h, shown, seed }: { data: WidgetData; w: number; h: number; shown: number; seed: string }) {
   const bodyH = h - HEADER - 16
-  if (data.kind === 'bar' || data.kind === 'line') return <><Chart data={data} w={w - 28} h={bodyH - (data.series.length > 1 ? 22 : 0)} shown={shown} seed={seed} /><Legend series={data.series} /></>
+  if (data.kind === 'bar' || data.kind === 'line') {
+    const chartW = Math.max(w - 28, 62 + data.labels.length * (data.series.length > 1 ? 70 : 52))
+    const chartH = Math.max(48, bodyH - (data.series.length > 1 ? 24 : 0))
+    return <><div className="widget-chart-scroll" role="region" aria-label={`${data.kind === 'bar' ? 'Bar' : 'Line'} chart: ${data.title}`} tabIndex={0}><Chart data={data} w={chartW} h={chartH} shown={shown} seed={seed} /></div><Legend series={data.series} /></>
+  }
   if (data.kind === 'pie') return <Pie data={data} w={w - 28} h={bodyH} shown={shown} seed={seed} />
   if (data.kind === 'table') return (
-    <table className="widget-table">
+    <div className="widget-table-scroll" role="region" aria-label={`Table: ${data.title}`} tabIndex={0}><table className="widget-table" style={{ minWidth: Math.max(w - 28, data.labels.length * 110) }}>
       <thead><tr>{data.labels.map((label, i) => <th key={i}>{label}</th>)}</tr></thead>
       <tbody>{data.rows.slice(0, reveal(shown, data.rows.length)).map((row, r) => <tr key={r}>{row.map((cell, c) => <td key={c}>{cell}</td>)}</tr>)}</tbody>
-    </table>
+    </table></div>
   )
   if (data.kind === 'stats') return (
-    <div className="widget-stats">
+    <div className="widget-stats" role="region" aria-label={`Statistics: ${data.title}`} tabIndex={0}>
       {data.labels.map((label, i) => <div key={i} style={{ opacity: i < reveal(shown, data.labels.length) ? 1 : 0 }}><b>{fmt(data.series[0]?.values[i] ?? 0, data.unit)}</b><span>{label}</span></div>)}
     </div>
   )
   return (
-    <ol className="widget-timeline">
+    <ol className="widget-timeline" aria-label={`Timeline: ${data.title}`} tabIndex={0}>
       {data.rows.slice(0, reveal(shown, data.rows.length)).map(([when, what], i) => <li key={i}><b>{when}</b><span>{what}</span></li>)}
     </ol>
   )

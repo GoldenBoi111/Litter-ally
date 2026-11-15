@@ -13,6 +13,7 @@ type Props = {
   done: boolean
   summary: string
   level: number
+  onLevelChange: (level: number) => void
   planReady: boolean
   error: string
   onAnswer: (text: string) => void
@@ -22,7 +23,7 @@ type Props = {
 
 const MAX_SECONDS = 28
 
-export function DiagnosticChat({ title, turns, busy, done, level, planReady, error, onAnswer, onClose, onStart }: Props) {
+export function DiagnosticChat({ title, turns, busy, done, level, onLevelChange, planReady, error, onAnswer, onClose, onStart }: Props) {
   const [phase, setPhase] = useState<'idle' | 'speaking' | 'connecting' | 'listening' | 'transcribing'>('idle')
   const [micError, setMicError] = useState('')
   const voice = useRef<DiagnosticVoice | null>(null)
@@ -110,7 +111,6 @@ export function DiagnosticChat({ title, turns, busy, done, level, planReady, err
     }
   }
 
-  const position = ((level - AIMD.min) / (AIMD.max - AIMD.min)) * 100
   const status = busy ? 'Thinking…' : phase === 'speaking' ? 'Speaking…' : phase === 'connecting' ? 'Connecting microphone…' : phase === 'listening' ? 'Listening… let go of Space (or tap) when you’re done' : phase === 'transcribing' ? 'Catching that…' : 'Hold Space or tap the mic to answer'
 
   return (
@@ -123,11 +123,16 @@ export function DiagnosticChat({ title, turns, busy, done, level, planReady, err
         <Button type="button" variant="ghost" size="sm" className="diagnostic-skip" onClick={onClose}>{done ? 'Close' : 'Skip'}</Button>
       </header>
 
-      <div className="diagnostic-meter" aria-label={`Explaining at level ${level} of 10: ${levelLabel(level)}`}>
-        <span>Everyday</span>
-        <div className="diagnostic-meter-track"><i style={{ left: `${position}%` }} /></div>
-        <span>Technical</span>
-        <b>{levelLabel(level)}</b>
+      <div className="diagnostic-meter">
+        <div className="diagnostic-meter-heading">
+          <label htmlFor="diagnostic-language-level">Explanation style</label>
+          <output htmlFor="diagnostic-language-level">{levelLabel(level)} · {level}/10</output>
+        </div>
+        <input id="diagnostic-language-level" className="diagnostic-level" type="range" min={AIMD.min} max={AIMD.max} step={1}
+          value={level} aria-label="How technical should the explanations be?" aria-valuetext={`${levelLabel(level)}, level ${level} of 10`}
+          onChange={event => onLevelChange(Number(event.currentTarget.value))} />
+        <div className="diagnostic-meter-endpoints"><span>Plain language</span><span>More technical</span></div>
+        <p className="diagnostic-meter-hint">Set a starting point. The tutor will still adjust as you talk.</p>
       </div>
 
       {done ? (
