@@ -42,7 +42,14 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
+  const waiting = status === 'connecting' || status === 'drawing'
+  const [showWaiting, setShowWaiting] = useState(false)
   useEffect(() => { localStorage.setItem(CC_KEY, captions ? 'on' : 'off') }, [captions])
+  useEffect(() => {
+    if (!waiting) { setShowWaiting(false); return }
+    const timeout = window.setTimeout(() => setShowWaiting(true), 650)
+    return () => window.clearTimeout(timeout)
+  }, [waiting])
 
   const live = ['connecting', 'listening', 'speaking', 'drawing'].includes(status)
   const talking = live && !micMuted
@@ -172,7 +179,12 @@ export function LessonDock({ plan, planBusy, checkpointIndex, status, detail, mi
 
       </div>
 
-      {status === 'error' && detail ? (
+      {showWaiting ? (
+        <div className="lesson-waiting" role="status" aria-live="polite">
+          <span className="lesson-waiting-spinner" aria-hidden="true" />
+          <span>{status === 'drawing' ? 'Working on the board…' : detail || 'Thinking…'}</span>
+        </div>
+      ) : status === 'error' && detail ? (
         // Start failures (e.g. a blocked microphone) must be visible even with captions off, or Start just looks like it reset.
         <div className="lesson-captions" role="alert">
           <p className="lesson-captions-detail">{detail}</p>

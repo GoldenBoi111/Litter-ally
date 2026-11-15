@@ -197,10 +197,21 @@
 }
 .lesson-captions { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 2; }
 .lesson-captions .lesson-captions-detail { font-size: 14px; background: rgb(28 25 23 / .6); }
+.lesson-waiting {
+  position: absolute; left: 50%; bottom: 84px; translate: -50% 0; z-index: 390; pointer-events: none;
+  display: flex; align-items: center; gap: 10px; max-width: calc(100% - 48px); padding: 9px 14px;
+  color: #fffdf9; background: rgb(28 25 23 / .82); border-radius: 8px; font: 500 15px var(--font-family-body);
+}
+.lesson-waiting-spinner {
+  width: 16px; height: 16px; flex: 0 0 auto; border: 2px solid rgb(255 253 249 / .45);
+  border-top-color: #f8dc4c; border-radius: 50%; animation: lesson-wait-spin .8s linear infinite;
+}
+@keyframes lesson-wait-spin { to { rotate: 360deg; } }
 @media (max-width: 900px) {
   .talk-pill .talk-copy span:not(.keycap) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .talk-pill, .talk-orb i { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .lesson-waiting-spinner { animation: none; border-top-color: #f8dc4c; } }
 
 /* Keep lesson controls fixed at the canvas top; the canvas toolbar stays at the bottom. */
 .lesson-bar {
