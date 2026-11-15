@@ -60,7 +60,6 @@ export function ProjectsPage({ projects, papers, loading = false, onOpen, onCrea
         <div>
           <p className="projects-eyebrow">Your workspace / {projects.length} {projects.length === 1 ? 'board' : 'boards'}</p>
           <h1>Projects</h1>
-          <p className="projects-intro">A board for every subject you are piecing together.</p>
         </div>
         {!creating && !loading && projects.length > 0 && <Button onClick={() => setCreating(true)}>+ New project</Button>}
       </header>
